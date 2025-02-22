@@ -39,4 +39,44 @@ const getCouponsBySchool = async (schoolId) => {
   return db.promise().query(query, [schoolId]);
 };
 
-module.exports = { createCoupon, getCouponsBySchool };
+
+
+const createStudentCoupon = async (schoolId, code, discountPercentage, validFrom, validUntil, maxUses) => {
+  const query = `
+    INSERT INTO student_coupons (
+      school_id,
+      code,
+      discount_percentage,
+      valid_from,
+      valid_until,
+      max_uses,
+      current_uses
+    ) VALUES (?, ?, ?, ?, ?, ?, 0)
+  `;
+  return db.promise().query(query, [
+    schoolId,
+    code,
+    discountPercentage,
+    validFrom,
+    validUntil,
+    maxUses
+  ]);
+};
+
+const getStudentsBySchool = async (schoolId) => {
+  const query = `
+    SELECT s.*
+    FROM students s
+    JOIN users u ON s.user_id = u.id
+    WHERE s.school_id = ?
+  `;
+  return db.promise().query(query, [schoolId]);
+};
+
+// Add these exports
+module.exports = { 
+  createCoupon, 
+  getCouponsBySchool,
+  createStudentCoupon,
+  getStudentsBySchool
+};

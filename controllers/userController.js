@@ -226,7 +226,26 @@ const removeSchoolFromSE = async (req, res) => {
 // };
 
 
+const getStudentCountBySchool = async (req, res) => {
+  const { schoolId } = req.params;
+  
+  try {
+    const [result] = await db.promise().query(
+      `SELECT COUNT(*) as count 
+       FROM students 
+       WHERE school_id = ?`,
+      [schoolId]
+    );
+    
+    res.status(200).json({ count: result[0].count });
+  } catch (error) {
+    console.error('Error fetching student count:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch student count',
+      details: error.message 
+    });
+  }
+};
 
 
-
-module.exports = { registerUser, fetchSEEmployees, fetchSchools , getAllUsers, getSchoolsBySE,assignSchoolToSE, removeSchoolFromSE, checkSEDetails};
+module.exports = { registerUser, fetchSEEmployees, fetchSchools , getAllUsers, getSchoolsBySE,assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool };

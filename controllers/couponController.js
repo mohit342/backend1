@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
-const { createCoupon, getCouponsBySchool } = require('../models/coupons');
+const { createCoupon, getCouponsBySchool,  createStudentCoupon,
+} = require('../models/coupons');
 const { sendCouponNotification } = require('../config/emailService');
 
 const generateCoupon = async (req, res) => {
@@ -217,9 +218,173 @@ const validateCoupon = async (req, res) => {
 };
 
 
+// Add to couponController.js
+
+const generateStudentCoupon = async (req, res) => {
+  console.log('Request body for student coupon:', req.body);
+  const {
+    schoolId,
+    discountPercentage,
+    validFrom,
+    validUntil,
+    maxUses
+  } = req.body;
+
+  try {
+    // Check for missing fields
+    if (!schoolId || !discountPercentage || !validFrom || !validUntil) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Verify that the school exists and get email
+    const [schoolResults] = await db.promise().query(`
+      SELECT 
+        u.email as school_email,
+        s.school_name
+      FROM schools s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.id = ?
+    `, [schoolId]);
+
+    if (!schoolResults || schoolResults.length === 0) {
+      return res.status(404).json({ error: 'School not found' });
+    }
+
+    const { school_email, school_name } = schoolResults[0];
+
+    // Generate coupon code with school prefix
+    const couponCode = `STU-${schoolId.toString().padStart(4, '0')}-${uuidv4().substring(0, 6).toUpperCase()}`;
+    console.log('Generated Student Coupon Code:', couponCode);
+
+    // Create the coupon
+    try {
+      await createStudentCoupon(
+        schoolId,
+        couponCode,
+        discountPercentage,
+        validFrom,
+        validUntil,
+        maxUses || 100 // Higher max uses for student coupons
+      );
+    } catch (createError) {
+      console.error('Error creating student coupon:', createError);
+      return res.status(500).json({
+        error: 'Failed to create student coupon in database',
+        details: createError.message
+      });
+    }
+
+    // Get student count for the school
+    const [studentResults] = await db.promise().query(`
+      SELECT COUNT(*) as student_count
+      FROM students s
+      WHERE s.school_id = ?
+    `, [schoolId]);
+
+    const studentCount = studentResults[0]?.student_count || 0;
+
+    res.status(200).json({
+      message: 'Student coupon generated successfully',
+      couponCode,
+      schoolEmail: school_email,
+      schoolName: school_name,
+      studentCount,
+    });
+
+  } catch (error) {
+    console.error('Error in student coupon generation process:', error);
+    res.status(500).json({
+      error: 'Failed to generate student coupon',
+      details: error.message
+    });
+  }
+};
+
+const sendStudentCouponEmail = async (req, res) => {
+  console.log('Received student coupon email request:', req.body);
+  const { 
+    couponCode,
+    schoolId,
+    discountPercentage,
+    validFrom,
+    validUntil 
+  } = req.body;
+  
+  if (!couponCode || !schoolId) {
+    return res.status(400).json({
+      error: 'Missing required fields',
+      details: 'couponCode and schoolId are required',
+      received: { couponCode, schoolId }
+    });
+  }
+
+  try {
+    // Get school email and student emails
+    const [schoolResults] = await db.promise().query(`
+      SELECT u.email as school_email, s.school_name
+      FROM schools s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.id = ?
+      LIMIT 1
+    `, [schoolId]);
+
+    if (!schoolResults || schoolResults.length === 0) {
+      return res.status(404).json({ 
+        error: 'School email not found',
+        details: 'Could not find matching school'
+      });
+    }
+
+    // Get student emails
+    const [studentResults] = await db.promise().query(`
+      SELECT u.email
+      FROM students s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.school_id = ?
+    `, [schoolId]);
+
+    const studentEmails = studentResults.map(s => s.email);
+
+    const couponDetails = {
+      code: couponCode,
+      discountPercentage,
+      validFrom,
+      validUntil,
+      schoolName: schoolResults[0].school_name
+    };
+
+    // Assuming you have a function to send emails to multiple recipients
+    await sendStudentCouponNotification(
+      schoolResults[0].school_email,
+      studentEmails,
+      couponDetails
+    );
+
+    res.status(200).json({ 
+      message: 'Student coupon emails sent successfully',
+      recipients: {
+        school_email: schoolResults[0].school_email,
+        student_count: studentEmails.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in student coupon email sending process:', error);
+    res.status(500).json({ 
+      error: 'Failed to process student coupon email request',
+      details: error.message 
+    });
+  }
+};
+
+// Add these to module.exports
 module.exports = {
   generateCoupon,
   getSchoolCoupons,
   sendCouponEmail,
-  validateCoupon
+  validateCoupon,
+  generateStudentCoupon,
+  sendStudentCouponEmail
 };
+
+
