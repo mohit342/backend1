@@ -1,21 +1,46 @@
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
-
-# testing
-/coverage
-
-# production
-/build
-
-# misc
-.DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
+# Node.js
+node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+*.log
+
+# Cache directories
+.npm/
+.yarn/
+.pnp.*
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# IDE/Editor Files
+.vscode/
+.idea/
+*.suo
+*.user
+
+# Dependency Lock Files (Optional)
+# package-lock.json
+# yarn.lock
+
+# Test Output
+coverage/
+
+# Miscellaneous
+*.tmp
+*.bak
