@@ -3,6 +3,7 @@ const bodyParser = require('body-parser');
 const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
+const auth1Routes = require('./routes/auth1Routes');
 
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -24,7 +25,8 @@ app.use(cors({
 }));
 app.use('/api', authRoutes);
 
-
+app.use(cookieParser());
+app.use('/api/auth', auth1Routes);
 app.use('/api', userRoutes);
 app.use('/api', couponRoutes);
 app.use(express.urlencoded({ extended: true }));
