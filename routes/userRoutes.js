@@ -1,5 +1,5 @@
 const express = require('express');
-const { registerUser, fetchSEEmployees, fetchSchools, getAllUsers, getSchoolsBySE, assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool } = require('../controllers/userController');
+const { registerUser, fetchSEEmployees, fetchSchools, getAllUsers, getSchoolsBySE, assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool, getSchoolDetails ,getUserById} = require('../controllers/userController');
 const { login } = require('../controllers/authController'); // Add this line
 const router = express.Router();
 
@@ -17,5 +17,10 @@ router.delete('/se-school-mapping/:seEmployeeId/:schoolId', removeSchoolFromSE);
 router.get('/se-details/:seId', checkSEDetails);
 // Add to userRoutes.js
 router.get('/students/count/:schoolId', getStudentCountBySchool);
+router.get('/school-details/:userId', getSchoolDetails);
+router.get('/users/:id', getUserById);  // Add this line
+
+
 
 module.exports = router;
+

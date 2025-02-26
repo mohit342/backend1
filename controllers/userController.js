@@ -246,6 +246,53 @@ const getStudentCountBySchool = async (req, res) => {
     });
   }
 };
+const getSchoolDetails = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const [school] = await db.promise().query(
+      `SELECT school_name FROM schools WHERE user_id = ?`,
+      [userId]
+    );
+
+    if (school.length > 0) {
+      res.status(200).json(school[0]);
+    } else {
+      res.status(404).json({ error: "School not found" });
+    }
+  } catch (error) {
+    console.error('Error fetching school details:', error);
+    res.status(500).json({ error: 'Failed to fetch school details' });
+  }
+};
+
+const getUserById = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [user] = await db.promise().query(
+      `SELECT 
+        u.id,
+        CONCAT(u.first_name, ' ', u.last_name) as full_name,
+        u.email,
+        u.user_type as role,
+        s.school_name
+      FROM users u
+      LEFT JOIN students s ON u.id = s.user_id
+      WHERE u.id = ?`,
+      [id]
+    );
+
+    if (user.length > 0) {
+      res.status(200).json(user[0]);
+    } else {
+      res.status(404).json({ error: "User not found" });
+    }
+  } catch (error) {
+    console.error('Error fetching user:', error);
+    res.status(500).json({ error: 'Failed to fetch user' });
+  }
+};
 
 
-module.exports = { registerUser, fetchSEEmployees, fetchSchools , getAllUsers, getSchoolsBySE,assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool };
+module.exports = { registerUser, fetchSEEmployees, fetchSchools , getAllUsers, getSchoolsBySE,assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool,getSchoolDetails,getUserById };
