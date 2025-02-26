@@ -15,6 +15,8 @@ const couponApplicationRoutes = require('./routes/couponApplicationRoutes');
 const rewardRoutes = require('./routes/rewardRoutes');
 const checkoutRoutes = require('./routes/checkoutRoutes');
 const cookieParser = require('cookie-parser');
+const cartRoutes = require("./routes/cartRoutes");
+const errorHandler = require("./middleware/errorMiddleware");
 
 
 const app = express();
@@ -30,18 +32,22 @@ app.use('/api/auth', auth1Routes);
 app.use('/api', userRoutes);
 app.use('/api', couponRoutes);
 app.use(express.urlencoded({ extended: true }));
-// app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api', productRoutes);
 app.use('/api', categoryRoutes);
 app.use('/api', attributeRoutes);
 app.use('/api', couponApplicationRoutes);
 app.use('/api', rewardRoutes);
 app.use('/api', checkoutRoutes);
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Routes
+app.use("/api/cart", cartRoutes);
 
-app.get('/test-image', (req, res) => {
-  res.sendFile(path.join(__dirname, 'uploads', '1740119282854_cray6.jpg'));
-});
+// Error Handling Middleware
+app.use(errorHandler);
+
+// app.get('/test-image', (req, res) => {
+//   res.sendFile(path.join(__dirname, 'uploads', '1740119282854_cray6.jpg'));
+// });
 app.use(cookieParser());
 app.get('', (req, res) => {
   res.end('welcome')

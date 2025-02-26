@@ -227,55 +227,64 @@ const productController = {
 
 
 // Get top trending products
+// Get top trending products
+// Get top trending products
 async getTopTrending(req, res) {
     try {
-        console.log("Fetching trending products..."); // Debugging
+        console.log("Fetching top trending products...");
 
+        // Fetch latest products with their images
         const [products] = await db.execute(`
             SELECT 
                 p.id, 
                 p.name, 
-                p.slug, 
-                p.short_description, 
-                p.description, 
+                 
                 p.price, 
-                p.stock_quantity, 
-                GROUP_CONCAT(pi.image_url) AS images,
+                
+                COALESCE(GROUP_CONCAT(pi.image_url), '') AS images, 
                 DATE(p.created_at) AS created_at
             FROM products p
             LEFT JOIN product_images pi ON p.id = pi.product_id
             GROUP BY p.id
             ORDER BY p.created_at DESC
-            LIMIT 10
+            LIMIT 5
         `);
 
-        console.log("Fetched Products:", products); // Debugging
-        if (!products.length) {
-            return res.status(404).json({
-                success: false,
-                message: "No trending products found"
-            });
+        if (products.length === 0) {
+            return res.status(404).json({ success: false, message: "No trending products found" });
         }
 
-        const formattedProducts = products.map(product => ({
-            ...product,
-            images: product.images ? product.images.split(',') : [],
-            price: parseFloat(product.price)
-        }));
+        // Convert image URLs into an array and ensure full paths
+        const formattedProducts = products.map(product => {
+            // Process image paths
+            let imageArray = [];
+            if (product.images) {
+                imageArray = product.images.split(',').map(imagePath => {
+                    // If the image path doesn't start with http or /, prepend the server URL
+                    if (!imagePath.startsWith('http') && !imagePath.startsWith('/')) {
+                        // For development: using localhost
+                        return `http://localhost:5000/${imagePath}`;
+                    }
+                    return imagePath;
+                });
+            }
 
-        res.status(200).json({
-            success: true,
-            data: formattedProducts
+            return {
+                ...product,
+                images: imageArray,
+                price: parseFloat(product.price),  // Ensure price is a number
+            };
         });
+
+        res.status(200).json({ success: true, data: formattedProducts });
     } catch (error) {
-        console.error('Error fetching trending products:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error fetching trending products',
-            error: error.message
-        });
+        console.error("Error fetching trending products:", error);
+        res.status(500).json({ success: false, message: "Error fetching trending products", error: error.message });
     }
-},
+}
+
+,
+
 
 async deleteProduct(req, res) {
     let connection;
