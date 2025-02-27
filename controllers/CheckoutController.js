@@ -12,35 +12,39 @@ class CheckoutController {
 
     static async processCheckout(req, res) {
         try {
-            const { fullName, email, address, city, state, pincode, phone, total, couponCode } = req.body;
+            const { userId, fullName, email, address, city, state, pincode, phone, total, couponCode, cartItems } = req.body;
     
             let discount = 0;
-        if (couponCode) {
-            const coupon = await CheckoutModel.validateCoupon(couponCode);
-            if (coupon) {
-                discount = coupon.discount; // Ensure `discount` is a valid number
+            if (couponCode) {
+                const coupon = await CheckoutModel.validateCoupon(couponCode);
+                if (coupon) {
+                    discount = coupon.discount;
+                }
             }
-        }
-
-        const finalTotal = Math.max(0, total - discount); // Ensure total doesn't go negative
-
-        const result = await CheckoutModel.saveOrder({
-            fullName,
-            email,
-            address,
-            city,
-            state,
-            pincode,
-            phone,
-            total: finalTotal
-        });
     
-        res.json({ message: 'Order placed successfully', orderId: result.insertId, discount });
-    } catch (error) {
-        console.error("Error processing order:", error); // Log the error for debugging
-        res.status(500).json({ error: "Failed to process order" });
+            const finalTotal = Math.max(0, total - discount);
+    
+            const result = await CheckoutModel.saveOrder({
+                userId, // Ensure this is passed from frontend
+                fullName,
+                email,
+                address,
+                city,
+                state,
+                pincode,
+                phone,
+                total: finalTotal,
+                couponCode,
+                items: cartItems // Ensure cartItems is passed from frontend
+            });
+    
+            res.json({ message: 'Order placed successfully', orderId: result.insertId, discount });
+        } catch (error) {
+            console.error("Error processing order:", error);
+            res.status(500).json({ error: "Failed to process order" });
+        }
     }
-}
+    
     static async validateCoupon(req, res) {
         try {
             const { code } = req.body;
