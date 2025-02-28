@@ -23,26 +23,44 @@ const registerUser = async (req, res) => {
     console.log('Registering user with data:', { userType, firstName, lastName , schoolName});
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const [userResult] = await insertUser([firstName, lastName, email, mobile, otp, hashedPassword, userType]);
-    const userId = userResult.insertId;
+    const userInsertResult= await insertUser([firstName, lastName, email, mobile, otp, hashedPassword, userType]);
+    if (!userInsertResult || !userInsertResult[0] || !userInsertResult[0].insertId) {
+      console.error("Unexpected result from insertUser:", userInsertResult);
+      return res.status(500).json({ message: "Database insert error" });
+  }
+  
+  const userId = userInsertResult[0].insertId;
+    // const userId = userResult.insertId;
 
     if (userType === 'student') {
       // Fetch the school_id based on the selected schoolName
-      const [school] = await db.promise().query("SELECT id FROM schools WHERE school_name = ?", [schoolName]);
+      const result = await db.query("SELECT * FROM schools WHERE school_name = ?", [schoolName]);
+console.log("Database query result:", result);  // 🔍 Log the response
+
+if (!Array.isArray(result)) {
+    console.error("Unexpected result format in school query:", result);
+    return res.status(500).json({ message: "Database error" });
+}
+
+const [school] = result;  
     
       if (school.length === 0) {
         return res.status(400).json({ error: "Invalid school selected" });
       }
     
       // Save the student with school_id
-      await db.promise().query(
+      await db.query(
         "INSERT INTO students (user_id, school_id, school_name) VALUES (?, ?, ?)",
         [userId, school[0].id, schoolName]
       );
     }
      else if (userType === 'school') {
       // Pass employeeId directly to insertSchool
-      const [schoolResult] = await insertSchool(userId, schoolName, pinCode, city, state, address, employeeId);
+      const schoolInsertResult = await insertSchool(userId, schoolName, pinCode, city, state, address, employeeId);
+      if (!schoolInsertResult || !schoolInsertResult[0] || !schoolInsertResult[0].insertId) {
+        console.error("Unexpected result from insertSchool:", schoolInsertResult);
+        return res.status(500).json({ message: "Database insert error" });
+    }
     } else if (userType === 'se') {
       await insertSE(userId, employeeId);
     }
@@ -67,7 +85,7 @@ const registerUser = async (req, res) => {
 
 const fetchSchools = async (req, res) => {
   try {
-    const [results] = await db.promise().query('SELECT school_name FROM schools');
+    const [results] = await db.query('SELECT school_name FROM schools');
     res.status(200).json(results);
   } catch (error) {
     console.error(error);
@@ -77,7 +95,7 @@ const fetchSchools = async (req, res) => {
 
 const getAllUsers = async (req, res) => {
   try {
-    const [users] = await db.promise().query(`
+    const [users] = await db.query(`
       SELECT 
         u.id,
         CONCAT(u.first_name, ' ', u.last_name) as full_name,
@@ -115,7 +133,7 @@ const getSchoolsBySE = async (req, res) => {
     console.log('Fetching schools for SE ID:', seId);
 
     // Get schools where employee_id matches the SE's employee_id
-    const [schools] = await db.promise().query(
+    const [schools] = await db.query(
       `SELECT id, school_name, city, state 
        FROM schools 
        WHERE employee_id = ?`,
@@ -139,7 +157,7 @@ const checkSEDetails = async (req, res) => {
   const { seId } = req.params;
   
   try {
-    const [seDetails] = await db.promise().query(
+    const [seDetails] = await db.query(
       `SELECT se.*, u.first_name, u.last_name 
        FROM se_employees se
        JOIN users u ON se.user_id = u.id
@@ -148,7 +166,7 @@ const checkSEDetails = async (req, res) => {
     );
 
     // Also get the schools count
-    const [schoolsCount] = await db.promise().query(
+    const [schoolsCount] = await db.query(
       `SELECT COUNT(*) as count 
        FROM schools 
        WHERE employee_id = ?`,
@@ -168,7 +186,7 @@ const checkSEDetails = async (req, res) => {
 
 const fetchSEEmployees = async (req, res) => {
   try {
-    const [results] = await db.promise().query(
+    const [results] = await db.query(
       `SELECT se.employee_id 
        FROM se_employees se
        JOIN users u ON se.user_id = u.id
@@ -188,7 +206,7 @@ const assignSchoolToSE = async (req, res) => {
   const { seEmployeeId, schoolId } = req.body;
   
   try {
-    await db.promise().query(
+    await db.query(
       `INSERT INTO se_school_mapping (se_employee_id, school_id) 
        VALUES (?, ?)`,
       [seEmployeeId, schoolId]
@@ -206,7 +224,7 @@ const removeSchoolFromSE = async (req, res) => {
   const { seEmployeeId, schoolId } = req.params;
   
   try {
-    await db.promise().query(
+    await db.query(
       `DELETE FROM se_school_mapping 
        WHERE se_employee_id = ? AND school_id = ?`,
       [seEmployeeId, schoolId]
@@ -242,7 +260,7 @@ const getStudentCountBySchool = async (req, res) => {
   const { schoolId } = req.params;
   
   try {
-    const [result] = await db.promise().query(
+    const [result] = await db.query(
       `SELECT COUNT(*) as count 
        FROM students 
        WHERE school_id = ?`,
@@ -262,7 +280,7 @@ const getSchoolDetails = async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const [school] = await db.promise().query(
+    const [school] = await db.query(
       `SELECT school_name FROM schools WHERE user_id = ?`,
       [userId]
     );
@@ -282,7 +300,7 @@ const getUserById = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const [user] = await db.promise().query(
+    const [user] = await db.query(
       `SELECT 
         u.id,
         CONCAT(u.first_name, ' ', u.last_name) as full_name,

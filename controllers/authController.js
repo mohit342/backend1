@@ -39,7 +39,7 @@ const login = async (req, res) => {
 
   try {
     // Get user from database with all necessary information
-    const [users] = await db.promise().query(
+    const [users] = await db.query(
       `SELECT 
         u.id,
         u.email,
@@ -135,7 +135,7 @@ const resetPassword = async (req, res) => {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     // Update the password in the database
-    await db.promise().query(
+    await db.query(
       `UPDATE users SET password = ? WHERE email = ?`,
       [hashedPassword, email]
     );

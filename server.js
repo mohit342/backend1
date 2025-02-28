@@ -17,6 +17,7 @@ const checkoutRoutes = require('./routes/checkoutRoutes');
 const cookieParser = require('cookie-parser');
 const cartRoutes = require("./routes/cartRoutes");
 const errorHandler = require("./middleware/errorMiddleware");
+const orderRoutes = require("./routes/orderRoutes");
 
 
 const app = express();
@@ -40,6 +41,8 @@ app.use('/api', couponApplicationRoutes);
 app.use('/api', rewardRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/coupons', require("./routes/couponRoutes"));
+app.use('/api', checkoutRoutes);
+app.use("/api/orders", orderRoutes);
 // Routes
 app.use("/api/cart", cartRoutes);
 

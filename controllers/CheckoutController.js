@@ -13,26 +13,13 @@ class CheckoutController {
 
     static async processCheckout(req, res) {
         try {
-            const { 
-                userId, 
-                fullName, 
-                email, 
-                address, 
-                city, 
-                state, 
-                pincode, 
-                phone, 
-                total, 
-                couponCode 
-            } = req.body;
+            const { userId,fullName, email, address, city, state, pincode, phone, total, couponCode, cartItems } = req.body;
     
             let discount = 0;
-            
-            // Verify coupon belongs to this user if a coupon is provided
             if (couponCode) {
                 try {
                     // Get user type first to determine which coupon table to check
-                    const [userResult] = await db.promise().query(
+                    const [userResult] = await db.query(
                         'SELECT user_type FROM users WHERE id = ?',
                         [userId]
                     );
@@ -49,7 +36,7 @@ class CheckoutController {
                     // Validate coupon based on prefix and user type
                     if (couponCode.startsWith('SE-') && userType === 'school') {
                         // Check school coupon
-                        const [schoolResult] = await db.promise().query(
+                        const [schoolResult] = await db.query(
                             'SELECT id FROM schools WHERE user_id = ?',
                             [userId]
                         );
@@ -57,7 +44,7 @@ class CheckoutController {
                         if (schoolResult.length > 0) {
                             const schoolId = schoolResult[0].id;
                             
-                            const [couponResult] = await db.promise().query(
+                            const [couponResult] = await db.query(
                                 `SELECT * FROM coupons 
                                 WHERE code = ? 
                                 AND school_id = ?
@@ -75,7 +62,7 @@ class CheckoutController {
                         }
                     } else if (couponCode.startsWith('STU-') && userType === 'student') {
                         // Check student coupon
-                        const [studentResult] = await db.promise().query(
+                        const [studentResult] = await db.query(
                             'SELECT school_id FROM students WHERE user_id = ?',
                             [userId]
                         );
@@ -83,7 +70,7 @@ class CheckoutController {
                         if (studentResult.length > 0) {
                             const schoolId = studentResult[0].school_id;
                             
-                            const [couponResult] = await db.promise().query(
+                            const [couponResult] = await db.query(
                                 `SELECT * FROM student_coupons 
                                 WHERE code = ? 
                                 AND school_id = ?
@@ -101,7 +88,7 @@ class CheckoutController {
                         }
                     } else if (!couponCode.startsWith('SE-') && !couponCode.startsWith('STU-')) {
                         // Check generic coupons (for all user types)
-                        const [couponResult] = await db.promise().query(
+                        const [couponResult] = await db.query(
                             `SELECT * FROM generic_coupons 
                             WHERE code = ? 
                             AND valid_from <= NOW() 
@@ -132,13 +119,13 @@ class CheckoutController {
                     discount = (total * couponData.discount_percentage) / 100;
                     
                     // Update coupon usage
-                    await db.promise().query(
+                    await db.query(
                         `UPDATE ${couponTable} SET current_uses = current_uses + 1 WHERE id = ?`,
                         [couponData.id]
                     );
                     
                     // Log coupon usage
-                    await db.promise().query(
+                    await db.query(
                         `INSERT INTO coupon_usage_log (user_id, coupon_code, discount_amount, order_total, coupon_table) 
                          VALUES (?, ?, ?, ?, ?)`,
                         [userId, couponCode, discount, total, couponTable]
@@ -162,7 +149,8 @@ class CheckoutController {
                 phone,
                 total: finalTotal,
                 couponCode: couponCode || null,
-                discountAmount: discount
+                discountAmount: discount,
+                items: cartItems
             });
     
             res.json({ 
@@ -210,7 +198,7 @@ class CheckoutController {
             // More detailed validation logic based on coupon prefix
             if (code.startsWith('SE-')) {
                 // School coupon validation
-                const [schoolResult] = await db.promise().query(
+                const [schoolResult] = await db.query(
                     `SELECT id FROM schools WHERE user_id = ?`,
                     [userId]
                 );
@@ -233,7 +221,7 @@ class CheckoutController {
                 
             } else if (code.startsWith('STU-')) {
                 // Student coupon validation
-                const [studentResult] = await db.promise().query(
+                const [studentResult] = await db.query(
                     `SELECT school_id FROM students WHERE user_id = ?`,
                     [userId]
                 );
@@ -266,7 +254,7 @@ class CheckoutController {
                 params = [code];
             }
             
-            const [couponResult] = await db.promise().query(couponQuery, params);
+            const [couponResult] = await db.query(couponQuery, params);
             
             if (couponResult.length === 0) {
                 return res.status(400).json({ 
