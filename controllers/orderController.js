@@ -18,6 +18,15 @@ exports.getOrderById = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+exports.getOrdersByEmail = async (req, res) => {
+  try {
+    const { email } = req.params;
+    const orders = await Order.getOrdersByEmail(email);
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
 exports.createOrder = async (req, res) => {
   try {

@@ -38,6 +38,12 @@ class Order {
     const [result] = await db.execute("DELETE FROM orders WHERE id = ?", [id]);
     return result.affectedRows;
   }
+  static async getOrdersByEmail(email) {
+    const [rows] = await db.execute("SELECT * FROM orders WHERE email = ?", [email]);
+    return rows;
+  }
+  
+  
 }
 
 module.exports = Order;
