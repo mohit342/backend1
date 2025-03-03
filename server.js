@@ -38,7 +38,8 @@ app.use('/api', categoryRoutes);
 app.use('/api', attributeRoutes);
 app.use('/api', couponApplicationRoutes);
 app.use('/api', rewardRoutes);
-app.use('/api', checkoutRoutes);
+app.use('/api/checkout', checkoutRoutes);
+app.use('/api/coupons', require("./routes/couponRoutes"));
 // Routes
 app.use("/api/cart", cartRoutes);
 

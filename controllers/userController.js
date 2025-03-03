@@ -20,15 +20,27 @@ const registerUser = async (req, res) => {
   } = req.body;
 
   try {
-    console.log('Registering user with data:', { userType, firstName, lastName });
+    console.log('Registering user with data:', { userType, firstName, lastName , schoolName});
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const [userResult] = await insertUser([firstName, lastName, email, mobile, otp, hashedPassword, userType]);
     const userId = userResult.insertId;
 
     if (userType === 'student') {
-      await insertStudent(userId, schoolName);
-    } else if (userType === 'school') {
+      // Fetch the school_id based on the selected schoolName
+      const [school] = await db.promise().query("SELECT id FROM schools WHERE school_name = ?", [schoolName]);
+    
+      if (school.length === 0) {
+        return res.status(400).json({ error: "Invalid school selected" });
+      }
+    
+      // Save the student with school_id
+      await db.promise().query(
+        "INSERT INTO students (user_id, school_id, school_name) VALUES (?, ?, ?)",
+        [userId, school[0].id, schoolName]
+      );
+    }
+     else if (userType === 'school') {
       // Pass employeeId directly to insertSchool
       const [schoolResult] = await insertSchool(userId, schoolName, pinCode, city, state, address, employeeId);
     } else if (userType === 'se') {
