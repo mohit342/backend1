@@ -19,7 +19,7 @@ const generateCoupon = async (req, res) => {
 
   // Check if a coupon already exists for this school
   try {
-    const [existingCoupons] = await db.promise().query(
+    const [existingCoupons] = await db.query(
       `SELECT * FROM coupons WHERE school_id = ?`,
       [schoolId]
     );
@@ -41,7 +41,7 @@ const generateCoupon = async (req, res) => {
     const validUntil = oneYearLater.toISOString().slice(0, 19).replace('T', ' ');
 
     // Insert school coupon
-    await db.promise().query(
+    await db.query(
       `INSERT INTO coupons (school_id, se_employee_id, code, discount_percentage, valid_from, valid_until, max_uses, current_uses) 
        VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
       [schoolId, seEmployeeId, couponCode, 10, validFrom, validUntil, 1]
@@ -50,14 +50,14 @@ const generateCoupon = async (req, res) => {
     // Generate and insert student coupon
     const studentCouponCode = `STU-${schoolId.toString().padStart(4, '0')}-${uuidv4().substring(0, 6).toUpperCase()}`;
     
-    await db.promise().query(
+    await db.query(
       `INSERT INTO student_coupons (school_id, code, discount_percentage, valid_from, valid_until, max_uses, current_uses) 
        VALUES (?, ?, ?, ?, ?, ?, 0)`,
       [schoolId, studentCouponCode, 15, validFrom, validUntil, 500]
     );
 
     // Get school name for the response
-    const [schoolResults] = await db.promise().query(
+    const [schoolResults] = await db.query(
       `SELECT school_name FROM schools WHERE id = ?`,
       [schoolId]
     );
@@ -98,7 +98,7 @@ const sendCouponEmail = async (req, res) => {
 
   try {
     // Get email addresses and coupon details
-    const [results] = await db.promise().query(`
+    const [results] = await db.query(`
       SELECT 
         u1.email as school_email,
         u2.email as se_email,
@@ -121,7 +121,7 @@ const sendCouponEmail = async (req, res) => {
     }
 
     // Get student emails
-    const [studentResults] = await db.promise().query(`
+    const [studentResults] = await db.query(`
       SELECT u.email
       FROM students s
       JOIN users u ON s.user_id = u.id
@@ -173,7 +173,7 @@ const getSchoolCoupons = async (req, res) => {
 
   try {
     // Get school coupons
-    const [schoolCoupons] = await db.promise().query(`
+    const [schoolCoupons] = await db.query(`
       SELECT 
         c.*,
         s.school_name,
@@ -187,7 +187,7 @@ const getSchoolCoupons = async (req, res) => {
     `, [schoolId]);
     
     // Get student coupons
-    const [studentCoupons] = await db.promise().query(`
+    const [studentCoupons] = await db.query(`
       SELECT 
         sc.*,
         s.school_name,
@@ -227,7 +227,7 @@ const validateCoupon = async (req, res) => {
 
       if (userType === 'school') {
           console.log("Checking school coupon...");
-          const [school] = await db.promise().query(
+          const [school] = await db.query(
               "SELECT id FROM schools WHERE user_id = ?",
               [userId]
           );
@@ -247,7 +247,7 @@ const validateCoupon = async (req, res) => {
 
       } else if (userType === 'student') {
           console.log("Checking student coupon...");
-          const [student] = await db.promise().query(
+          const [student] = await db.query(
               "SELECT school_id FROM students WHERE user_id = ?",
               [userId]
           );
@@ -278,7 +278,7 @@ const validateCoupon = async (req, res) => {
       }
 
       console.log("Executing query:", couponQuery, params);
-      const [couponResult] = await db.promise().query(couponQuery, params);
+      const [couponResult] = await db.query(couponQuery, params);
 
       if (couponResult.length === 0) {
           console.error("No matching coupon found.");
@@ -319,7 +319,7 @@ const generateStudentCoupon = async (req, res) => {
     }
 
     // Verify that the school exists and get email
-    const [schoolResults] = await db.promise().query(`
+    const [schoolResults] = await db.query(`
       SELECT 
         u.email as school_email,
         s.school_name
@@ -357,7 +357,7 @@ const generateStudentCoupon = async (req, res) => {
     }
 
     // Get student count for the school
-    const [studentResults] = await db.promise().query(`
+    const [studentResults] = await db.query(`
       SELECT COUNT(*) as student_count
       FROM students s
       WHERE s.school_id = ?
@@ -402,7 +402,7 @@ const sendStudentCouponEmail = async (req, res) => {
 
   try {
     // Get school email and student emails
-    const [schoolResults] = await db.promise().query(`
+    const [schoolResults] = await db.query(`
       SELECT u.email as school_email, s.school_name
       FROM schools s
       JOIN users u ON s.user_id = u.id
@@ -418,7 +418,7 @@ const sendStudentCouponEmail = async (req, res) => {
     }
 
     // Get student emails
-    const [studentResults] = await db.promise().query(`
+    const [studentResults] = await db.query(`
       SELECT u.email
       FROM students s
       JOIN users u ON s.user_id = u.id

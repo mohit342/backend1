@@ -16,24 +16,33 @@ class CheckoutModel {
 
   static async saveOrder(orderData) {
     try {
-      const [result] = await db.query(
-        'INSERT INTO orders (full_name, email, address, city, state, pincode, phone, total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          orderData.fullName,
-          orderData.email,
-          orderData.address,
-          orderData.city,
-          orderData.state,
-          orderData.pincode,
-          orderData.phone,
-          orderData.total
-        ]
-      );
-      return result;
+        console.log("Attempting to save order:", orderData);
+
+        const [result] = await db.query(
+            'INSERT INTO orders (userId, fullName, email, address, city, state, pincode, phone, total, couponCode, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+                orderData.userId || null,  // Allow null for guest users
+                orderData.fullName,
+                orderData.email,
+                orderData.address,
+                orderData.city,
+                orderData.state,
+                orderData.pincode,
+                orderData.phone,
+                orderData.total,
+                orderData.couponCode || null,
+                JSON.stringify(orderData.items) // Convert cart items to JSON format
+            ]
+        );
+
+        console.log("Order inserted, ID:", result.insertId);
+        return result;
     } catch (error) {
-      throw error;
+        console.error("Database error:", error);
+        throw error;
     }
-  }
+}
+
   static async validateCoupon(code) {
     try {
       const [rows] = await db.query(

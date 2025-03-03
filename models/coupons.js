@@ -13,7 +13,7 @@ const createCoupon = async (schoolId, seEmployeeId, code, discountPercentage, va
       current_uses
     ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
   `;
-  return db.promise().query(query, [
+  return db.query(query, [
     schoolId,
     seEmployeeId,
     code,
@@ -36,7 +36,7 @@ const getCouponsBySchool = async (schoolId) => {
     JOIN users u ON se.user_id = u.id
     WHERE c.school_id = ?
   `;
-  return db.promise().query(query, [schoolId]);
+  return db.query(query, [schoolId]);
 };
 
 
@@ -53,7 +53,7 @@ const createStudentCoupon = async (schoolId, code, discountPercentage, validFrom
       current_uses
     ) VALUES (?, ?, ?, ?, ?, ?, 0)
   `;
-  return db.promise().query(query, [
+  return db.query(query, [
     schoolId,
     code,
     discountPercentage,
@@ -70,7 +70,7 @@ const getStudentsBySchool = async (schoolId) => {
     JOIN users u ON s.user_id = u.id
     WHERE s.school_id = ?
   `;
-  return db.promise().query(query, [schoolId]);
+  return db.query(query, [schoolId]);
 };
 
 // Add these exports

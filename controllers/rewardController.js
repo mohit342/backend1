@@ -14,7 +14,7 @@ const trackReward = async (req, res) => {
   } = req.body;
 
   try {
-    await db.promise().query(`
+    await db.query(`
       INSERT INTO reward_tracking (
         se_employee_id,
         coupon_code,
@@ -26,7 +26,7 @@ const trackReward = async (req, res) => {
     `, [se_employee_id, coupon_code, school_id, discount_percentage, discount_amount, order_id]);
 
     // Update coupon usage count
-    await db.promise().query(`
+    await db.query(`
       UPDATE coupons 
       SET current_uses = current_uses + 1
       WHERE code = ?
@@ -44,7 +44,7 @@ const getSeRewards = async (req, res) => {
   const { se_employee_id } = req.params;
 
   try {
-    const [rewards] = await db.promise().query(`
+    const [rewards] = await db.query(`
       SELECT 
         rt.*,
         s.school_name,
@@ -56,7 +56,7 @@ const getSeRewards = async (req, res) => {
     `, [se_employee_id]);
 
     // Calculate summary statistics
-    const [summary] = await db.promise().query(`
+    const [summary] = await db.query(`
       SELECT 
         COUNT(DISTINCT school_id) as total_schools,
         COUNT(*) as total_orders,

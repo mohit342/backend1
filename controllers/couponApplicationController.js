@@ -12,7 +12,7 @@ const applyCoupon = async (req, res) => {
 
   try {
     // Get coupon details and validate
-    const [couponResults] = await db.promise().query(`
+    const [couponResults] = await db.query(`
       SELECT 
         c.*,
         COUNT(cu.coupon_id) as times_used
@@ -102,7 +102,7 @@ const validateCouponDetails = async (coupon, orderAmount) => {
 
 const recordCouponUsage = async (couponId, userId) => {
   try {
-    await db.promise().query(`
+    await db.query(`
       INSERT INTO coupon_usage (
         coupon_id,
         user_id,
@@ -119,7 +119,7 @@ const validateCoupon = async (req, res) => {
   const { code } = req.params;
 
   try {
-    const [couponResults] = await db.promise().query(`
+    const [couponResults] = await db.query(`
       SELECT 
         c.*,
         COUNT(cu.coupon_id) as times_used
