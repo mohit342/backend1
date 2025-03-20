@@ -26,10 +26,13 @@ app.use(cors({
   origin: ['http://localhost:3000', 'http://localhost:3001'], 
   credentials: true
 }));
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api', authRoutes);
 
 app.use(cookieParser());
 app.use('/api/auth', auth1Routes);
+
 app.use('/api', userRoutes);
 app.use('/api', couponRoutes);
 app.use(express.urlencoded({ extended: true }));
@@ -41,6 +44,7 @@ app.use('/api', couponApplicationRoutes);
 app.use('/api', rewardRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/coupons', require("./routes/couponRoutes"));
+
 app.use('/api', checkoutRoutes);
 app.use("/api/orders", orderRoutes);
 // Routes
@@ -69,4 +73,3 @@ app.get('', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-

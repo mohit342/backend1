@@ -20,47 +20,17 @@ const registerUser = async (req, res) => {
   } = req.body;
 
   try {
-    console.log('Registering user with data:', { userType, firstName, lastName , schoolName});
+    console.log('Registering user with data:', { userType, firstName, lastName });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const userInsertResult= await insertUser([firstName, lastName, email, mobile, otp, hashedPassword, userType]);
-    if (!userInsertResult || !userInsertResult[0] || !userInsertResult[0].insertId) {
-      console.error("Unexpected result from insertUser:", userInsertResult);
-      return res.status(500).json({ message: "Database insert error" });
-  }
-  
-  const userId = userInsertResult[0].insertId;
-    // const userId = userResult.insertId;
+    const [userResult] = await insertUser([firstName, lastName, email, mobile, otp, hashedPassword, userType]);
+    const userId = userResult.insertId;
 
     if (userType === 'student') {
-      // Fetch the school_id based on the selected schoolName
-      const result = await db.query("SELECT * FROM schools WHERE school_name = ?", [schoolName]);
-console.log("Database query result:", result);  // 🔍 Log the response
-
-if (!Array.isArray(result)) {
-    console.error("Unexpected result format in school query:", result);
-    return res.status(500).json({ message: "Database error" });
-}
-
-const [school] = result;  
-    
-      if (school.length === 0) {
-        return res.status(400).json({ error: "Invalid school selected" });
-      }
-    
-      // Save the student with school_id
-      await db.query(
-        "INSERT INTO students (user_id, school_id, school_name) VALUES (?, ?, ?)",
-        [userId, school[0].id, schoolName]
-      );
-    }
-     else if (userType === 'school') {
+      await insertStudent(userId, schoolName);
+    } else if (userType === 'school') {
       // Pass employeeId directly to insertSchool
-      const schoolInsertResult = await insertSchool(userId, schoolName, pinCode, city, state, address, employeeId);
-      if (!schoolInsertResult || !schoolInsertResult[0] || !schoolInsertResult[0].insertId) {
-        console.error("Unexpected result from insertSchool:", schoolInsertResult);
-        return res.status(500).json({ message: "Database insert error" });
-    }
+      const [schoolResult] = await insertSchool(userId, schoolName, pinCode, city, state, address, employeeId);
     } else if (userType === 'se') {
       await insertSE(userId, employeeId);
     }
@@ -301,17 +271,19 @@ const getUserById = async (req, res) => {
 
   try {
     const [user] = await db.query(
-      `SELECT 
-        u.id,
-        CONCAT(u.first_name, ' ', u.last_name) as full_name,
-        u.email,
-        u.user_type as role,
-        s.school_name
-      FROM users u
-      LEFT JOIN students s ON u.id = s.user_id
-      WHERE u.id = ?`,
-      [id]
-    );
+    `SELECT 
+      u.id,
+      u.first_name,
+      u.last_name,
+       CONCAT(u.first_name, ' ', u.last_name) as full_name,
+      u.email,
+      u.user_type as role,
+      s.school_name
+    FROM users u
+    LEFT JOIN students s ON u.id = s.user_id
+    WHERE u.id = ?`,
+    [id]
+  );
 
     if (user.length > 0) {
       res.status(200).json(user[0]);
@@ -323,6 +295,128 @@ const getUserById = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch user' });
   }
 };
+const updateUser = async (req, res) => {
+  const { id } = req.params;
+  const { firstName, lastName, email, password } = req.body;
+
+  try {
+    let hashedPassword;
+    if (password) {
+      hashedPassword = await bcrypt.hash(password, 10);
+    }
+
+    const updates = [];
+    const values = [];
+
+    if (firstName !== undefined) {
+      updates.push('first_name = ?');
+      values.push(firstName);
+    }
+    if (lastName !== undefined) {
+      updates.push('last_name = ?');
+      values.push(lastName);
+    }
+    if (email !== undefined) {
+      updates.push('email = ?');
+      values.push(email);
+    }
+    if (password) {
+      updates.push('password = ?');
+      values.push(hashedPassword);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    const query = `UPDATE users SET ${updates.join(', ')} WHERE id = ?`;
+    values.push(id);
+
+    await db.query(query, values);
+    res.status(200).json({ message: 'User updated successfully' });
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+};
+const addToWishlist = async (req, res) => {
+  const { userId, productId } = req.body;
+
+  try {
+    await db.query(
+      `INSERT INTO wishlist (user_id, product_id) 
+       VALUES (?, ?) 
+       ON DUPLICATE KEY UPDATE created_at = CURRENT_TIMESTAMP`,
+      [userId, productId]
+    );
+    res.status(200).json({ message: 'Product added to wishlist' });
+  } catch (error) {
+    console.error('Error adding to wishlist:', error);
+    res.status(500).json({ error: 'Failed to add to wishlist' });
+  }
+};
+
+const getWishlist = async (req, res) => {
+  const { userId } = req.params;
+
+  console.log(`Fetching wishlist for userId: ${userId}`);
+
+  try {
+    const [wishlist] = await db.query(
+      `SELECT 
+         p.id, 
+         p.name, 
+         p.price, 
+         p.short_description, 
+         GROUP_CONCAT(pi.image_url) AS images
+       FROM wishlist w 
+       JOIN products p ON w.product_id = p.id 
+       LEFT JOIN product_images pi ON p.id = pi.product_id 
+       WHERE w.user_id = ? 
+       GROUP BY p.id, p.name, p.price, p.short_description`,
+      [userId]
+    );
+
+    // Parse the images string into an array
+    const formattedWishlist = wishlist.map(item => ({
+      ...item,
+      images: item.images ? item.images.split(',') : [] // Convert comma-separated string to array
+    }));
+
+    console.log('Wishlist fetched successfully:', formattedWishlist);
+    res.status(200).json(formattedWishlist);
+  } catch (error) {
+    console.error('Detailed error fetching wishlist:', error);
+    res.status(500).json({ error: 'Failed to fetch wishlist', details: error.message });
+  }
+};
+const removeFromWishlist = async (req, res) => {
+  const { userId, productId } = req.body;
+
+  try {
+    const [result] = await db.query(
+      `DELETE FROM wishlist 
+       WHERE user_id = ? AND product_id = ?`,
+      [userId, productId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Item not found in wishlist' });
+    }
+
+    res.status(200).json({ message: 'Product removed from wishlist' });
+  } catch (error) {
+    console.error('Error removing from wishlist:', error);
+    res.status(500).json({ error: 'Failed to remove from wishlist' });
+  }
+};
 
 
-module.exports = { registerUser, fetchSEEmployees, fetchSchools , getAllUsers, getSchoolsBySE,assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool,getSchoolDetails,getUserById };
+module.exports = { 
+  registerUser, updateUser, fetchSEEmployees, fetchSchools, getAllUsers, 
+  getSchoolsBySE, assignSchoolToSE, removeSchoolFromSE, checkSEDetails, 
+  getStudentCountBySchool, getSchoolDetails, getUserById, 
+  addToWishlist, getWishlist , removeFromWishlist
+};
+
+

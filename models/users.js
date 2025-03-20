@@ -1,12 +1,12 @@
 // users.js
 const db = require('../config/db');
 
-const insertUser = async (userData) => {
+const insertUser = (userData) => {
   const query = `INSERT INTO users (first_name, last_name, email, mobile, otp, password, user_type)
                  VALUES (?, ?, ?, ?, ?, ?, ?)`;
-  const [result] = await db.query(query, userData);
-  return [result];  // Ensure it returns the insert result
+  return db.query(query, userData);
 };
+
 const insertSE = (userId, employeeId) => {
   const query = 'INSERT INTO se_employees (user_id, employee_id) VALUES (?, ?)';
   return db.query(query, [userId, employeeId]);
@@ -20,26 +20,31 @@ const insertStudent = (userId, schoolName) => {
 const insertSchool = async (userId, schoolName, pinCode, city, state, address, employeeId) => {
   let connection;
   try {
-    connection = await db.getConnection(); // ✅ Get a connection instance
+    // Get a connection from the pool
+    connection = await db.getConnection();
+
+    // Start transaction
     await connection.beginTransaction();
 
+    // Insert school data
     const [schoolResult] = await connection.query(
       `INSERT INTO schools (user_id, school_name, pin_code, city, state, address, employee_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [userId, schoolName, pinCode, city, state, address, employeeId]
     );
 
+    // Commit transaction
     await connection.commit();
     return [schoolResult];
   } catch (error) {
-    if (connection) await connection.rollback(); // ✅ Rollback if error occurs
+    // Rollback transaction on error
+    if (connection) await connection.rollback();
     throw error;
   } finally {
-    if (connection) connection.release(); // ✅ Release connection after usage
+    // Release the connection back to the pool
+    if (connection) connection.release();
   }
 };
-
-
 
 
 module.exports = { insertUser, insertStudent, insertSchool, insertSE };

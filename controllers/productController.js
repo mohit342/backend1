@@ -5,67 +5,58 @@ const productController = {
     async create(req, res) {
         let connection;
         try {
-          connection = await db.getConnection();
-          await connection.beginTransaction();
+            connection = await db.getConnection();
+            await connection.beginTransaction();
     
-          let { 
-            name, 
-            slug, 
-            shortDescription, 
-            description, 
-            price, 
-            stockQuantity, 
-            categoryId, 
-            subcategoryId, 
-            subSubcategoryId, 
-            selectedAttributes 
-          } = req.body;
-              // Ensure selectedAttributes is an array or empty array
-              const attributesArray = selectedAttributes ? JSON.parse(selectedAttributes) : [];
-      
-          
-              // Process uploaded images
-              const images = req.files.map(file => file.path); 
-
-            // Insert product into the products table
-           
-
+            let { 
+                name, 
+                slug, 
+                shortDescription, 
+                description, 
+                price, 
+                stockQuantity, 
+                categoryId, 
+                subcategoryId, 
+                subSubcategoryId, 
+                selectedAttributes 
+            } = req.body;
+    
+            // Generate slug if not provided
+            const generateSlug = (text) =>
+                text.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w\-]+/g, '').replace(/\-\-+/g, '-');
+    
+            const finalSlug = slug || generateSlug(name);
+    
+            const attributesArray = selectedAttributes ? JSON.parse(selectedAttributes) : [];
+            const images = req.files.map(file => file.path); 
+    
             const [productResult] = await connection.execute(
                 `INSERT INTO products 
-                (name, slug, short_description, description, price, stock_quantity, category_id, subcategory_id, sub_subcategory_id, attribute) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, // ✅ Now matches 9 values
-                [name || null, slug || null, shortDescription || null, description || null, 
-                 price || 0, stockQuantity || 0, categoryId || null, subcategoryId || null, subSubcategoryId || null, selectedAttributes || null] // ✅ Correct count
+                 (name, slug, short_description, description, price, stock_quantity, 
+                  category_id, subcategory_id, sub_subcategory_id, attribute, discount_percentage) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [name || null, finalSlug, shortDescription || null, description || null, 
+                 price || 0, stockQuantity || 0, categoryId || null, subcategoryId || null, 
+                 subSubcategoryId || null, selectedAttributes || null, req.body.discountPercentage || 0]
             );
-            
+    
             const productId = productResult.insertId;
-
-            if (typeof selectedAttributes === "string") {
-                selectedAttributes = selectedAttributes.split(",").map(attr => attr.trim());
-            }
-            
-
-            // Insert product attributes into the product_attributes table
-            if (Array.isArray(selectedAttributes) && selectedAttributes.length > 0) 
-            {
-                // Convert attribute values (e.g., 'Green', 'Large') to IDs
+    
+            if (Array.isArray(selectedAttributes) && selectedAttributes.length > 0) {
                 const [attributeRows] = await connection.query(
                     `SELECT id, value FROM attributes WHERE value IN (?)`,
                     [selectedAttributes]
                 );
-            
-                // Create mapping of values to their IDs
+    
                 const attributeMap = {};
                 attributeRows.forEach(row => {
                     attributeMap[row.value] = row.id;
                 });
-            
-                // Map selected attribute values to their corresponding IDs
+    
                 const attributeValues = selectedAttributes
-                    .map(attrValue => attributeMap[attrValue])  // Convert to ID
-                    .filter(attrId => attrId); // Remove undefined values
-            
-                // Insert only if valid IDs exist
+                    .map(attrValue => attributeMap[attrValue])
+                    .filter(attrId => attrId);
+    
                 if (attributeValues.length > 0) {
                     const attributeInsertValues = attributeValues.map(attrId => [productId, attrId]);
                     await connection.query(
@@ -74,9 +65,7 @@ const productController = {
                     );
                 }
             }
-            
-
-            // Insert product images into the product_images table
+    
             if (images && images.length > 0) {
                 const imageValues = images.map(imageUrl => [productId, imageUrl]);
                 await connection.query(
@@ -84,15 +73,15 @@ const productController = {
                     [imageValues]
                 );
             }
-
+    
             await connection.commit();
-
+    
             res.status(201).json({
                 success: true,
                 message: 'Product added successfully',
                 data: { productId }
             });
-
+    
         } catch (error) {
             if (connection) await connection.rollback();
             console.error('Error adding product:', error);
@@ -104,7 +93,8 @@ const productController = {
         } finally {
             if (connection) connection.release();
         }
-    },
+    }
+    ,
 
     //Get all products
     // async getAll(req, res) {
@@ -130,19 +120,23 @@ const productController = {
         try {
             // Fetch products along with the category name
             const [products] = await db.execute(`
-                SELECT 
-                    p.id, 
-                    p.name, 
-                    p.slug, 
-                    p.short_description, 
-                    p.description, 
-                    p.price, 
-                    p.stock_quantity, 
-                     DATE(p.created_at) AS created_at,
-                    p.category_id, 
-                    c.name AS category_name
-                FROM products p
-                LEFT JOIN categories c ON p.category_id = c.id
+               SELECT 
+                p.id, 
+                p.name, 
+                p.slug, 
+                p.short_description, 
+                p.description, 
+                p.price, 
+                p.stock_quantity, 
+                DATE(p.created_at) AS created_at,
+                p.category_id, 
+                p.discount_percentage,
+                c.name AS category, 
+                COALESCE(GROUP_CONCAT(pi.image_url), '') AS images
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            LEFT JOIN product_images pi ON p.id = pi.product_id
+            GROUP BY p.id
             `);
 
             
@@ -233,14 +227,13 @@ async getTopTrending(req, res) {
     try {
         console.log("Fetching top trending products...");
 
-        // Fetch latest products with their images
+        // Fetch products with discount percentage
         const [products] = await db.execute(`
             SELECT 
                 p.id, 
                 p.name, 
-                 
                 p.price, 
-                
+                p.discount_percentage,
                 COALESCE(GROUP_CONCAT(pi.image_url), '') AS images, 
                 DATE(p.created_at) AS created_at
             FROM products p
@@ -254,15 +247,11 @@ async getTopTrending(req, res) {
             return res.status(404).json({ success: false, message: "No trending products found" });
         }
 
-        // Convert image URLs into an array and ensure full paths
         const formattedProducts = products.map(product => {
-            // Process image paths
             let imageArray = [];
             if (product.images) {
                 imageArray = product.images.split(',').map(imagePath => {
-                    // If the image path doesn't start with http or /, prepend the server URL
                     if (!imagePath.startsWith('http') && !imagePath.startsWith('/')) {
-                        // For development: using localhost
                         return `http://localhost:5000/${imagePath}`;
                     }
                     return imagePath;
@@ -272,7 +261,8 @@ async getTopTrending(req, res) {
             return {
                 ...product,
                 images: imageArray,
-                price: parseFloat(product.price),  // Ensure price is a number
+                price: parseFloat(product.price),
+                discount_percentage: parseInt(product.discount_percentage) || 0  // Ensure number
             };
         });
 
@@ -282,7 +272,6 @@ async getTopTrending(req, res) {
         res.status(500).json({ success: false, message: "Error fetching trending products", error: error.message });
     }
 }
-
 ,
 
 
@@ -382,10 +371,60 @@ async deleteProduct(req, res) {
     } finally {
       if (connection) connection.release();
     }
-  }
+  },
+  // Get a single product by Slug
+async getBySlug(req, res) {
+    let connection;
+    try {
+        connection = await db.getConnection();
+        const slug = req.params.slug;
+
+        const [products] = await connection.execute(`
+            SELECT 
+                p.*,
+                c.name AS category_name,
+                GROUP_CONCAT(pi.image_url) AS images
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.id
+            LEFT JOIN product_images pi ON p.id = pi.product_id
+            WHERE p.slug = ?
+            GROUP BY p.id
+        `, [slug]);
+
+        if (products.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        const productData = {
+            ...products[0],
+            images: products[0].images ? products[0].images.split(',') : [],
+            price: parseFloat(products[0].price)
+        };
+
+        res.status(200).json({
+            success: true,
+            data: productData
+        });
+
+    } catch (error) {
+        console.error('Error fetching product:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error fetching product',
+            error: error.message
+        });
+    } finally {
+        if (connection) connection.release();
+    }
+}
+  
   
 
 
 };
+
 
 module.exports = productController;

@@ -2,27 +2,35 @@ const db = require('../config/db');
 
 const createCoupon = async (schoolId, seEmployeeId, code, discountPercentage, validFrom, validUntil, maxUses) => {
   const query = `
-    INSERT INTO coupons (
-      school_id, 
-      se_employee_id,
-      code,
-      discount_percentage,
-      valid_from,
-      valid_until,
-      max_uses,
-      current_uses
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+      INSERT INTO coupons (
+          school_id, 
+          se_employee_id,
+          code,
+          discount_percentage,
+          valid_from,
+          valid_until,
+          max_uses,
+          current_uses
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
   `;
-  return db.query(query, [
-    schoolId,
-    seEmployeeId,
-    code,
-    discountPercentage,
-    validFrom,
-    validUntil,
-    maxUses
-  ]);
+  return db.query(query, [schoolId, seEmployeeId, code, discountPercentage, validFrom, validUntil, maxUses]);
 };
+
+const createStudentCoupon = async (schoolId, code, discountPercentage, validFrom, validUntil, maxUses) => {
+  const query = `
+      INSERT INTO student_coupons (
+          school_id,
+          code,
+          discount_percentage,
+          valid_from,
+          valid_until,
+          max_uses,
+          current_uses
+      ) VALUES (?, ?, ?, ?, ?, ?, 0)
+  `;
+  return db.query(query, [schoolId, code, discountPercentage, validFrom, validUntil, maxUses]);
+};
+
 
 const getCouponsBySchool = async (schoolId) => {
   const query = `
@@ -41,27 +49,6 @@ const getCouponsBySchool = async (schoolId) => {
 
 
 
-const createStudentCoupon = async (schoolId, code, discountPercentage, validFrom, validUntil, maxUses) => {
-  const query = `
-    INSERT INTO student_coupons (
-      school_id,
-      code,
-      discount_percentage,
-      valid_from,
-      valid_until,
-      max_uses,
-      current_uses
-    ) VALUES (?, ?, ?, ?, ?, ?, 0)
-  `;
-  return db.query(query, [
-    schoolId,
-    code,
-    discountPercentage,
-    validFrom,
-    validUntil,
-    maxUses
-  ]);
-};
 
 const getStudentsBySchool = async (schoolId) => {
   const query = `
