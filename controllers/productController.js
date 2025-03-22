@@ -118,28 +118,28 @@ const productController = {
 
     async getAll(req, res) {
         try {
-            // Fetch products along with the category name
+            // Fetch products along with the category name and sub_subcategory_id
             const [products] = await db.execute(`
-               SELECT 
-                p.id, 
-                p.name, 
-                p.slug, 
-                p.short_description, 
-                p.description, 
-                p.price, 
-                p.stock_quantity, 
-                DATE(p.created_at) AS created_at,
-                p.category_id, 
-                p.discount_percentage,
-                c.name AS category, 
-                COALESCE(GROUP_CONCAT(pi.image_url), '') AS images
-            FROM products p
-            LEFT JOIN categories c ON p.category_id = c.id
-            LEFT JOIN product_images pi ON p.id = pi.product_id
-            GROUP BY p.id
+                SELECT 
+                    p.id, 
+                    p.name, 
+                    p.slug, 
+                    p.short_description, 
+                    p.description, 
+                    p.price, 
+                    p.stock_quantity, 
+                    DATE(p.created_at) AS created_at,
+                    p.category_id, 
+                    p.subcategory_id, 
+                    p.sub_subcategory_id,  -- Add this field
+                    p.discount_percentage,
+                    c.name AS category, 
+                    COALESCE(GROUP_CONCAT(pi.image_url), '') AS images
+                FROM products p
+                LEFT JOIN categories c ON p.category_id = c.id
+                LEFT JOIN product_images pi ON p.id = pi.product_id
+                GROUP BY p.id
             `);
-
-            
     
             res.status(200).json({
                 success: true,
