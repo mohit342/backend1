@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 const auth1Routes = require('./routes/auth1Routes');
+const db=require("./config/db")
 
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -18,6 +19,10 @@ const cookieParser = require('cookie-parser');
 const cartRoutes = require("./routes/cartRoutes");
 const errorHandler = require("./middleware/errorMiddleware");
 const orderRoutes = require("./routes/orderRoutes");
+const bulkOrderRoutes = require('./routes/bulkOrderRoutes'); 
+const enquiryRoutes = require('./routes/enquiryRoutes');
+const hotDealRoutes = require('./routes/hotDealRoutes');
+const categoryRoutes1 = require('./routes/categoryRoutes1');
 
 
 const app = express();
@@ -29,6 +34,8 @@ app.use(cors({
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api', authRoutes);
+app.set('mysqlPool', db);
+app.use('/api/enquiries', enquiryRoutes);
 
 app.use(cookieParser());
 app.use('/api/auth', auth1Routes);
@@ -37,6 +44,7 @@ app.use('/api', userRoutes);
 app.use('/api', couponRoutes);
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// app.use('/uploads', express.static('uploads'));
 app.use('/api', productRoutes);
 app.use('/api', categoryRoutes);
 app.use('/api', attributeRoutes);
@@ -44,13 +52,14 @@ app.use('/api', couponApplicationRoutes);
 app.use('/api', rewardRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/coupons', require("./routes/couponRoutes"));
-
+app.use('/api', hotDealRoutes);
 app.use('/api', checkoutRoutes);
 app.use("/api/orders", orderRoutes);
+app.use('/api/categories1', categoryRoutes1);
+
 // Routes
 app.use("/api/cart", cartRoutes);
-
-// Error Handling Middleware
+app.use('/api/bulk-orders', bulkOrderRoutes);// Error Handling Middleware
 app.use(errorHandler);
 
 // app.get('/test-image', (req, res) => {

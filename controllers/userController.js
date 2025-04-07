@@ -11,34 +11,69 @@ const registerUser = async (req, res) => {
     otp,
     password,
     userType,
+    schoolId,
     schoolName,
     pinCode,
     city,
     state,
     address,
-    employeeId // This will come from the dropdown
+    employeeId
   } = req.body;
 
+  let connection;
   try {
-    console.log('Registering user with data:', { userType, firstName, lastName });
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    // Validate required fields
+    if (!firstName || !lastName || !email || !mobile || !password || !userType) {
+      throw new Error('All required fields must be provided');
+    }
+    if (userType === 'school' && !schoolName) {
+      throw new Error('School name is required for school users');
+    }
+    if (userType === 'student' && !schoolId) {
+      throw new Error('School ID is required for students');
+    }
+    if (userType === 'se' && !employeeId) {
+      throw new Error('Employee ID is required for SE users');
+    }
+
+    // Check for existing email
+    const [existingUser] = await connection.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (existingUser.length > 0) {
+      throw new Error('Email already registered');
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const [userResult] = await insertUser([firstName, lastName, email, mobile, otp, hashedPassword, userType]);
+    const [userResult] = await connection.query(
+      'INSERT INTO users (first_name, last_name, email, mobile, otp, password, user_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [firstName, lastName, email, mobile, otp, hashedPassword, userType]
+    );
     const userId = userResult.insertId;
 
     if (userType === 'student') {
-      await insertStudent(userId, schoolName);
+      await connection.query('INSERT INTO students (user_id, school_id) VALUES (?, ?)', [userId, schoolId]);
     } else if (userType === 'school') {
-      // Pass employeeId directly to insertSchool
-      const [schoolResult] = await insertSchool(userId, schoolName, pinCode, city, state, address, employeeId);
+      const [schoolResult] = await connection.query(
+        'INSERT INTO schools (user_id, school_name, pin_code, city, state, address, employee_id, reward_points) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [userId, schoolName, pinCode, city, state, address, employeeId, 0.00]
+      );
+      if (!schoolResult.insertId) {
+        throw new Error('Failed to create school entry');
+      }
     } else if (userType === 'se') {
-      await insertSE(userId, employeeId);
+      await connection.query('INSERT INTO se_employees (user_id, employee_id) VALUES (?, ?)', [userId, employeeId]);
     }
 
-    res.status(200).json({ message: 'User registered successfully!' });
+    await connection.commit();
+    res.status(200).json({ message: 'User registered successfully!', userId });
   } catch (error) {
+    if (connection) await connection.rollback();
     console.error('Error in registerUser:', error);
-    res.status(500).json({ error: 'An error occurred while registering the user.' });
+    res.status(500).json({ error: 'An error occurred while registering the user', details: error.message });
+  } finally {
+    if (connection) connection.release();
   }
 };
 
@@ -55,7 +90,7 @@ const registerUser = async (req, res) => {
 
 const fetchSchools = async (req, res) => {
   try {
-    const [results] = await db.query('SELECT school_name FROM schools');
+    const [results] = await db.query('SELECT id, school_name FROM schools');
     res.status(200).json(results);
   } catch (error) {
     console.error(error);
@@ -250,16 +285,14 @@ const getSchoolDetails = async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const [school] = await db.query(
-      `SELECT school_name FROM schools WHERE user_id = ?`,
+    const [schoolResult] = await db.query(
+      'SELECT id, school_name FROM schools WHERE user_id = ?',
       [userId]
     );
-
-    if (school.length > 0) {
-      res.status(200).json(school[0]);
-    } else {
-      res.status(404).json({ error: "School not found" });
+    if (schoolResult.length === 0) {
+      return res.status(404).json({ error: 'School not found for this user' });
     }
+    res.json({ id: schoolResult[0].id, school_name: schoolResult[0].school_name });
   } catch (error) {
     console.error('Error fetching school details:', error);
     res.status(500).json({ error: 'Failed to fetch school details' });
@@ -268,23 +301,21 @@ const getSchoolDetails = async (req, res) => {
 
 const getUserById = async (req, res) => {
   const { id } = req.params;
-
   try {
     const [user] = await db.query(
-    `SELECT 
-      u.id,
-      u.first_name,
-      u.last_name,
-       CONCAT(u.first_name, ' ', u.last_name) as full_name,
-      u.email,
-      u.user_type as role,
-      s.school_name
-    FROM users u
-    LEFT JOIN students s ON u.id = s.user_id
-    WHERE u.id = ?`,
-    [id]
-  );
-
+      `SELECT 
+        u.id,
+        u.first_name,
+        u.last_name,
+        CONCAT(u.first_name, ' ', u.last_name) as full_name,
+        u.email,
+        u.user_type as role,
+        s.school_id
+      FROM users u
+      LEFT JOIN students s ON u.id = s.user_id
+      WHERE u.id = ?`,
+      [id]
+    );
     if (user.length > 0) {
       res.status(200).json(user[0]);
     } else {
@@ -411,12 +442,103 @@ const removeFromWishlist = async (req, res) => {
   }
 };
 
+// userController.js
+const getSchoolPoints = async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const [schoolResult] = await db.query(
+      'SELECT reward_points FROM schools WHERE user_id = ?',
+      [userId]
+    );
+    if (schoolResult.length === 0) {
+      return res.status(404).json({ error: 'School not found for this user' });
+    }
+    res.json({ reward_points: schoolResult[0].reward_points });
+  } catch (error) {
+    console.error('Error fetching school points:', error);
+    res.status(500).json({ error: 'Failed to fetch school points' });
+  }
+};
+const getStudentSchoolPoints = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    console.log(`Fetching school points for userId: ${userId}`);
+    const [studentResult] = await db.query(
+      'SELECT school_id FROM students WHERE user_id = ?',
+      [userId]
+    );
+    console.log('Student query result:', studentResult);
+    if (studentResult.length === 0) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+    const schoolId = studentResult[0].school_id;
+
+    const [schoolResult] = await db.query(
+       'SELECT reward_points FROM schools WHERE id = ?',
+      [schoolId]
+    );
+    console.log('School query result:', schoolResult);
+    if (schoolResult.length === 0) {
+      return res.status(404).json({ error: 'School not found' });
+    }
+    res.json({ reward_points: schoolResult[0].reward_points });
+  } catch (error) {
+    console.error('Error fetching school points for student:', error);
+    res.status(500).json({ error: 'Failed to fetch points' });
+  }
+};
+
+const getSchoolPointsById = async (req, res) => {
+  const { schoolId } = req.params;
+
+  try {
+    const [schoolResult] = await db.query(
+      'SELECT reward_points FROM schools WHERE id = ?',
+      [schoolId]
+    );
+    if (schoolResult.length === 0) {
+      return res.status(404).json({ error: 'School not found' });
+    }
+    res.json({ reward_points: schoolResult[0].reward_points });
+  } catch (error) {
+    console.error('Error fetching school points:', error);
+    res.status(500).json({ error: 'Failed to fetch school points' });
+  }
+};
+
+const getSERedeemPoints = async (req, res) => {
+  const { seId } = req.params;
+
+  try {
+    const [result] = await db.query(
+      'SELECT redeem_points FROM se_employees WHERE employee_id = ?',
+      [seId]
+    );
+    if (result.length === 0) {
+      return res.status(404).json({ error: 'SE employee not found' });
+    }
+    res.json({ redeem_points: result[0].redeem_points });
+  } catch (error) {
+    console.error('Error fetching SE redeem points:', error);
+    res.status(500).json({ error: 'Failed to fetch redeem points' });
+  }
+};
+
+const getUserCount = async (req, res) => {
+  try {
+    const [result] = await db.query('SELECT COUNT(*) as count FROM users');
+    res.status(200).json({ count: result[0].count });
+  } catch (error) {
+    console.error('Error fetching user count:', error);
+    res.status(500).json({ error: 'Failed to fetch user count' });
+  }
+};
 
 module.exports = { 
   registerUser, updateUser, fetchSEEmployees, fetchSchools, getAllUsers, 
   getSchoolsBySE, assignSchoolToSE, removeSchoolFromSE, checkSEDetails, 
   getStudentCountBySchool, getSchoolDetails, getUserById, 
-  addToWishlist, getWishlist , removeFromWishlist
+  addToWishlist, getWishlist , removeFromWishlist, getSchoolPoints, getStudentSchoolPoints,
+  getSchoolPointsById , getSERedeemPoints, getUserCount
 };
-
-

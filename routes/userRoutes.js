@@ -1,6 +1,7 @@
 const express = require('express');
-const { registerUser,updateUser, removeFromWishlist ,fetchSEEmployees,addToWishlist,getWishlist, fetchSchools, getAllUsers, getSchoolsBySE, assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool, getSchoolDetails ,getUserById} = require('../controllers/userController');
+const { registerUser,updateUser,getStudentSchoolPoints, removeFromWishlist ,fetchSEEmployees,addToWishlist,getWishlist, fetchSchools, getAllUsers, getSchoolsBySE, assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool, getSchoolDetails ,getUserById, getSERedeemPoints,getSchoolPoints , getSchoolPointsById, getUserCount} = require('../controllers/userController');
 const { login } = require('../controllers/authController'); // Add this line
+
 const router = express.Router();
 
 // Add the login route
@@ -23,8 +24,11 @@ router.put('/users/:id', updateUser);
 // In your routes file
 router.post('/wishlist/remove', removeFromWishlist); // Add this line
 router.post('/wishlist', addToWishlist);
-router.get('/wishlist/:userId', getWishlist);
-
+ router.get('/wishlist/:userId', getWishlist);
+ router.get('/se/:seId/points', getSERedeemPoints);getStudentSchoolPoints
+ router.get('/school/:userId/points', getSchoolPoints);
+ router.get('/schools/:schoolId/points', getSchoolPointsById);
+ router.get('/student-school-points/:userId', getStudentSchoolPoints);
+ router.get('/count', getUserCount);
 
 module.exports = router;
-

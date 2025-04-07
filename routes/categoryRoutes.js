@@ -11,7 +11,8 @@ const {
     addSubSubcategory,
     updateSubSubcategory,
     deleteSubcategory,
-    deleteSubSubcategory
+    deleteSubSubcategory,
+    getSubcategories
 } = require('../controllers/categoryController');
 
 // Category routes
@@ -21,6 +22,8 @@ router.put('/categories/:id', updateCategory);
 router.delete('/categories/:id', deleteCategory);
 
 // Subcategory routes
+router.get('/categories/:categoryId/subcategories', getSubcategories);
+
 router.post('/categories/:categoryId/subcategories', addSubcategory);
 router.put('/categories/:categoryId/subcategories/:subcategoryId', updateSubcategory);
 router.delete('/categories/:categoryId/subcategories/:subcategoryId', deleteSubcategory);

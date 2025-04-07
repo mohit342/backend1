@@ -537,6 +537,35 @@ const updateSubSubcategory = async (req, res) => {
     } finally {
         if (connection) connection.release();
     }
+   
+};
+const getSubcategories = async (req, res) => {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        const { categoryId } = req.params;
+
+        const [subcategories] = await connection.execute(
+            `SELECT s.id, s.name 
+             FROM subcategories s
+             WHERE s.category_id = ?`,
+            [categoryId]
+        );
+
+        res.status(200).json({
+            success: true,
+            data: subcategories
+        });
+
+    } catch (error) {
+        console.error('Error fetching subcategories:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch subcategories'
+        });
+    } finally {
+        if (connection) connection.release();
+    }
 };
 
 module.exports = {
@@ -549,5 +578,6 @@ module.exports = {
     deleteSubcategory,
     deleteSubSubcategory,
     updateSubcategory,
-    updateSubSubcategory
+    updateSubSubcategory,
+    getSubcategories
 };
