@@ -29,4 +29,21 @@ router.get('/schools/user/:userId/points', async (req, res) => {
       res.status(500).json({ error: 'Failed to fetch reward points' });
     }
   });
+  router.get('/orders/email/:email', async (req, res) => {
+    try {
+      const { email } = req.params;
+      const [rows] = await db.query('SELECT * FROM orders WHERE email = ?', [email]);
+      const ordersWithItems = rows.map(order => ({
+        ...order,
+        items: JSON.parse(order.items).map(item => ({
+          ...item,
+          image: item.image || `default/image.jpg` // Ensure image field
+        }))
+      }));
+      res.json(ordersWithItems);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      res.status(500).json({ error: 'Failed to fetch orders' });
+    }
+  });
 module.exports = router;

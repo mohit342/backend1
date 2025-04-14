@@ -36,6 +36,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api', authRoutes);
 app.set('mysqlPool', db);
 app.use('/api/enquiries', enquiryRoutes);
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
 app.use(cookieParser());
 app.use('/api/auth', auth1Routes);

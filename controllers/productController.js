@@ -137,6 +137,7 @@ const productController = {
                     COALESCE(GROUP_CONCAT(pi.image_url), '') AS images
                 FROM products p
                 LEFT JOIN categories c ON p.category_id = c.id
+                
                 LEFT JOIN product_images pi ON p.id = pi.product_id
                 GROUP BY p.id
             `);
