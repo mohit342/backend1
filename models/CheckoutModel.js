@@ -33,8 +33,9 @@ class CheckoutModel {
           orderData.couponCode || null,
           JSON.stringify(orderData.items.map(item => ({
             ...item,
-            image: item.image || `default/image.jpg` // Default image if not provided
-          })))        ]
+            image: item.image || 'default/placeholder.jpg' // Default image path
+          })))
+        ]
       );
 
       console.log("Order inserted, ID:", result.insertId);

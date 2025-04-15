@@ -5,6 +5,7 @@ const path = require('path');
 require('dotenv').config();
 const auth1Routes = require('./routes/auth1Routes');
 const db=require("./config/db")
+const reviewRoutes = require("./routes/reviewRoutes");
 
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
@@ -39,7 +40,9 @@ app.use('/api/enquiries', enquiryRoutes);
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
 app.use(cookieParser());
+app.use("/api/reviews", reviewRoutes);
 app.use('/api/auth', auth1Routes);
+
 
 app.use('/api', userRoutes);
 app.use('/api', couponRoutes);
