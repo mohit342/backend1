@@ -88,6 +88,7 @@ const login = async (req, res) => {
       firstName: user.first_name,
       lastName: user.last_name,
       role: user.role,
+      seRole: user.se_role,
       schoolName: user.school_name,
       employeeId: user.employee_id
     };

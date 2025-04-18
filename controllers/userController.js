@@ -17,7 +17,8 @@ const registerUser = async (req, res) => {
     city,
     state,
     address,
-    employeeId
+    employeeId,
+    seRole // New field for SE role
   } = req.body;
 
   let connection;
@@ -35,8 +36,8 @@ const registerUser = async (req, res) => {
     if (userType === 'student' && !schoolId) {
       throw new Error('School ID is required for students');
     }
-    if (userType === 'se' && !employeeId) {
-      throw new Error('Employee ID is required for SE users');
+    if (userType === 'se' && (!employeeId || !seRole)) {
+      throw new Error('Employee ID and SE Role are required for SE users');
     }
 
     // Check for existing email
@@ -47,8 +48,8 @@ const registerUser = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const [userResult] = await connection.query(
-      'INSERT INTO users (first_name, last_name, email, mobile, otp, password, user_type) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [firstName, lastName, email, mobile, otp, hashedPassword, userType]
+      'INSERT INTO users (first_name, last_name, email, mobile, otp, password, user_type, role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [firstName, lastName, email, mobile, otp, hashedPassword, userType, userType === 'se' ? seRole : null]
     );
     const userId = userResult.insertId;
 
@@ -107,6 +108,7 @@ const getAllUsers = async (req, res) => {
         u.email,
         u.mobile,
         u.user_type as role,
+        u.role as se_role,
         CASE 
           WHEN u.user_type = 'student' THEN s.school_name
           WHEN u.user_type = 'school' THEN sc.school_name
@@ -121,7 +123,6 @@ const getAllUsers = async (req, res) => {
       LEFT JOIN schools sc ON u.id = sc.user_id
       LEFT JOIN se_employees se ON u.id = se.user_id
     `);
-    
     res.status(200).json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -163,7 +164,7 @@ const checkSEDetails = async (req, res) => {
   
   try {
     const [seDetails] = await db.query(
-      `SELECT se.*, u.first_name, u.last_name 
+      `SELECT se.*, u.first_name, u.last_name ,  u.role as se_role
        FROM se_employees se
        JOIN users u ON se.user_id = u.id
        WHERE se.employee_id = ?`,
@@ -310,6 +311,7 @@ const getUserById = async (req, res) => {
         CONCAT(u.first_name, ' ', u.last_name) as full_name,
         u.email,
         u.user_type as role,
+        u.role as se_role,
         s.school_id
       FROM users u
       LEFT JOIN students s ON u.id = s.user_id
@@ -534,9 +536,102 @@ const getUserCount = async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch user count' });
   }
 };
+// userController.js
+const deleteUser = async (req, res) => {
+  const { id } = req.params;
+  let connection;
 
+  try {
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    // Check if the user exists
+    const [user] = await connection.query('SELECT user_type FROM users WHERE id = ?', [id]);
+    if (user.length === 0) {
+      throw new Error('User not found');
+    }
+    console.log(`User found with id ${id}, type: ${user[0].user_type}`);
+
+    const userType = user[0].user_type;
+
+    // Delete related coupon_usage_log for all user types
+    const [couponUsageLogResult] = await connection.query('DELETE FROM coupon_usage_log WHERE user_id = ?', [id]);
+    console.log(`Deleted ${couponUsageLogResult.affectedRows} coupon_usage_log entries for user_id ${id}`);
+
+    // Delete related data based on user type
+    if (userType === 'student') {
+      await connection.query('DELETE FROM students WHERE user_id = ?', [id]);
+      console.log(`Deleted student record for user_id ${id}`);
+    } else if (userType === 'school') {
+      // Get the school_id before deletion
+      const [school] = await connection.query('SELECT id FROM schools WHERE user_id = ?', [id]);
+      if (school.length > 0) {
+        const schoolId = school[0].id;
+        // Delete related students
+        const [studentResult] = await connection.query('DELETE FROM students WHERE school_id = ?', [schoolId]);
+        console.log(`Deleted ${studentResult.affectedRows} students for school_id ${schoolId}`);
+        // Delete related student_coupons
+        const [studentCouponResult] = await connection.query('DELETE FROM student_coupons WHERE school_id = ?', [schoolId]);
+        console.log(`Deleted ${studentCouponResult.affectedRows} student_coupons for school_id ${schoolId}`);
+        // Delete related coupons
+        await connection.query('DELETE FROM coupons WHERE school_id = ?', [schoolId]);
+        console.log(`Deleted coupons for school_id ${schoolId}`);
+        // Delete the school
+        await connection.query('DELETE FROM schools WHERE user_id = ?', [id]);
+        console.log(`Deleted school for user_id ${id}`);
+      }
+    } else if (userType === 'se') {
+      // Get the employee_id before deletion
+      const [se] = await connection.query('SELECT employee_id FROM se_employees WHERE user_id = ?', [id]);
+      if (se.length > 0) {
+        const employeeId = se[0].employee_id;
+        // Delete related coupons
+        const [couponResult] = await connection.query('DELETE FROM coupons WHERE se_employee_id = ?', [employeeId]);
+        console.log(`Deleted ${couponResult.affectedRows} coupons for se_employee_id ${employeeId}`);
+        // Delete from se_employees
+        await connection.query('DELETE FROM se_employees WHERE user_id = ?', [id]);
+        console.log(`Deleted se_employees record for user_id ${id}`);
+        // Clear employee_id in schools
+        await connection.query('UPDATE schools SET employee_id = NULL WHERE employee_id = ?', [employeeId]);
+        console.log(`Cleared employee_id ${employeeId} from schools`);
+      }
+    }
+
+    // Delete related cart_items
+    const [cartIds] = await connection.query('SELECT id FROM carts WHERE user_id = ?', [id]);
+    if (cartIds.length > 0) {
+      const cartIdList = cartIds.map(cart => cart.id);
+      const [cartItemResult] = await connection.query('DELETE FROM cart_items WHERE cartId IN (?)', [cartIdList]);
+      console.log(`Deleted ${cartItemResult.affectedRows} cart_items for user_id ${id}`);
+    }
+
+    // Delete related carts
+    const [cartResult] = await connection.query('DELETE FROM carts WHERE user_id = ?', [id]);
+    console.log(`Deleted ${cartResult.affectedRows} carts for user_id ${id}`);
+
+    // Delete from wishlist
+    await connection.query('DELETE FROM wishlist WHERE user_id = ?', [id]);
+    console.log(`Deleted wishlist entries for user_id ${id}`);
+
+    // Delete the user from the users table
+    const [result] = await connection.query('DELETE FROM users WHERE id = ?', [id]);
+    if (result.affectedRows === 0) {
+      throw new Error('Failed to delete user');
+    }
+    console.log(`Deleted user with id ${id}`);
+
+    await connection.commit();
+    res.status(200).json({ message: 'User deleted successfully' });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('Error deleting user:', error);
+    res.status(500).json({ error: 'Failed to delete user', details: error.message });
+  } finally {
+    if (connection) connection.release();
+  }
+};
 module.exports = { 
-  registerUser, updateUser, fetchSEEmployees, fetchSchools, getAllUsers, 
+  registerUser, updateUser, deleteUser, fetchSEEmployees, fetchSchools, getAllUsers, 
   getSchoolsBySE, assignSchoolToSE, removeSchoolFromSE, checkSEDetails, 
   getStudentCountBySchool, getSchoolDetails, getUserById, 
   addToWishlist, getWishlist , removeFromWishlist, getSchoolPoints, getStudentSchoolPoints,

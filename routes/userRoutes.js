@@ -1,5 +1,5 @@
 const express = require('express');
-const { registerUser,updateUser,getStudentSchoolPoints, removeFromWishlist ,fetchSEEmployees,addToWishlist,getWishlist, fetchSchools, getAllUsers, getSchoolsBySE, assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool, getSchoolDetails ,getUserById, getSERedeemPoints,getSchoolPoints , getSchoolPointsById, getUserCount} = require('../controllers/userController');
+const { registerUser,updateUser,getStudentSchoolPoints, deleteUser,removeFromWishlist ,fetchSEEmployees,addToWishlist,getWishlist, fetchSchools, getAllUsers, getSchoolsBySE, assignSchoolToSE, removeSchoolFromSE, checkSEDetails,getStudentCountBySchool, getSchoolDetails ,getUserById, getSERedeemPoints,getSchoolPoints , getSchoolPointsById, getUserCount} = require('../controllers/userController');
 const { login } = require('../controllers/authController'); // Add this line
 
 const router = express.Router();
@@ -16,6 +16,7 @@ router.get('/schools-by-se/:seId', getSchoolsBySE);
 router.post('/se-school-mapping', assignSchoolToSE);
 router.delete('/se-school-mapping/:seEmployeeId/:schoolId', removeSchoolFromSE);
 router.get('/se-details/:seId', checkSEDetails);
+router.delete('/users/:id', deleteUser);
 // Add to userRoutes.js
 router.get('/students/count/:schoolId', getStudentCountBySchool);
 router.get('/school-details/:userId', getSchoolDetails);

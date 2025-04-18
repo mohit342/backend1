@@ -1,7 +1,6 @@
 const db = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
-const { createCoupon, getCouponsBySchool,  createStudentCoupon,
-} = require('../models/coupons');
+const { createCoupon, getCouponsBySchool, createStudentCoupon } = require('../models/coupons');
 const { sendCouponNotification } = require('../config/emailService');
 
 const generateCoupon = async (req, res) => {
@@ -12,7 +11,6 @@ const generateCoupon = async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Verify that the school belongs to this SE
     const [schoolCheck] = await db.query(
       `SELECT id FROM schools WHERE id = ? AND employee_id = ?`,
       [schoolId, seEmployeeId]
@@ -21,12 +19,17 @@ const generateCoupon = async (req, res) => {
       return res.status(403).json({ error: 'You are not authorized to generate coupons for this school' });
     }
 
+    // Check for active coupons (valid and not expired)
     const [existingCoupons] = await db.query(
-      `SELECT id FROM coupons WHERE school_id = ? LIMIT 1`,
+      `SELECT id FROM coupons 
+       WHERE school_id = ? 
+       AND valid_from <= NOW() 
+       AND valid_until >= NOW() 
+       AND COALESCE(current_uses, 0) < max_uses`,
       [schoolId]
     );
     if (existingCoupons.length > 0) {
-      return res.status(400).json({ error: 'Coupon already generated for this school' });
+      return res.status(400).json({ error: 'An active coupon already exists for this school' });
     }
 
     const [schoolData] = await db.query(
@@ -39,9 +42,11 @@ const generateCoupon = async (req, res) => {
 
     const userId = schoolData[0].user_id;
     const couponCode = `SE-${schoolId.toString().padStart(4, '0')}-${uuidv4().substring(0, 6).toUpperCase()}`;
+    console.log('Generating school coupon:', { schoolId, couponCode, seEmployeeId });
     await createCoupon(schoolId, seEmployeeId, couponCode, discountPercentage, validFrom, validUntil, maxUses || 999999, userId);
 
     const studentCouponCode = `STU-${schoolId.toString().padStart(4, '0')}-${uuidv4().substring(0, 6).toUpperCase()}`;
+    console.log('Generating student coupon:', { schoolId, studentCouponCode });
     await createStudentCoupon(schoolId, studentCouponCode, discountPercentage, validFrom, validUntil, maxUses || 999999, userId);
 
     res.status(200).json({
@@ -59,13 +64,8 @@ const generateCoupon = async (req, res) => {
 };
 
 const sendCouponEmail = async (req, res) => {
-  console.log('Received email request:', req.body); // Add logging
-  const { couponCode,
-    schoolId,
-    seEmployeeId,
-    discountPercentage,
-    validFrom,
-    validUntil } = req.body;
+  console.log('Received email request:', req.body);
+  const { couponCode, schoolId, seEmployeeId, discountPercentage, validFrom, validUntil } = req.body;
   if (!couponCode || !schoolId || !seEmployeeId) {
     return res.status(400).json({
       error: 'Missing required fields',
@@ -75,7 +75,6 @@ const sendCouponEmail = async (req, res) => {
   }
 
   try {
-    // Get email addresses and coupon details
     const [results] = await db.query(`
       SELECT 
         u1.email as school_email,
@@ -124,7 +123,6 @@ const sendCouponEmail = async (req, res) => {
         se_email: results[0].se_email
       }
     });
-
   } catch (error) {
     console.error('Error in email sending process:', error);
     res.status(500).json({ 
@@ -142,20 +140,24 @@ const validateCoupon = async (req, res) => {
       return res.status(400).json({ error: "Missing required fields: code, userId, and userType are required" });
     }
 
-    let query;
+    console.log("Validating coupon:", { code, userId, userType });
+
+    let couponRows;
+
     if (userType === "school") {
-      query = `
-        SELECT c.*, s.school_name
+      const query = `
+        SELECT c.*, s.school_name, COALESCE(c.current_uses, 0) as current_uses
         FROM coupons c
         JOIN schools s ON c.school_id = s.id
         WHERE c.code = ? AND c.user_id = ?
         AND c.valid_from <= NOW() 
         AND c.valid_until >= NOW()
-        
       `;
+      [couponRows] = await db.query(query, [code, userId]);
+      console.log("School coupon query result:", couponRows);
     } else if (userType === "student") {
-      query = `
-        SELECT sc.*, s.school_name
+      const query = `
+        SELECT sc.*, s.school_name, COALESCE(sc.current_uses, 0) as current_uses
         FROM student_coupons sc
         JOIN schools s ON sc.school_id = s.id
         JOIN students st ON st.school_id = s.id
@@ -163,25 +165,47 @@ const validateCoupon = async (req, res) => {
         AND st.user_id = ?
         AND sc.valid_from <= NOW() 
         AND sc.valid_until >= NOW()
-        
       `;
+      [couponRows] = await db.query(query, [code, userId]);
+      console.log("Student coupon query result:", couponRows);
     } else {
       return res.status(400).json({ error: "Invalid user type" });
     }
 
-    const [coupon] = await db.query(query, [code, userId]);
+    if (!couponRows || couponRows.length === 0) {
+      const query = `
+        SELECT *, 'Universal' as school_name, COALESCE(current_uses, 0) as current_uses
+        FROM couponsall
+        WHERE code = ? 
+        AND valid_from <= NOW() 
+        AND valid_until >= NOW()
+        AND COALESCE(current_uses, 0) < max_uses
+      `;
+      [couponRows] = await db.query(query, [code]);
+      console.log("Couponsall query result:", couponRows);
+    }
 
-    if (!coupon.length) {
+    if (!couponRows || couponRows.length === 0) {
+      console.log("No valid coupon found for code:", code);
       return res.status(404).json({ 
         error: "Invalid coupon or unauthorized access", 
         details: "Coupon not found or not applicable for this user" 
       });
     }
 
+    const coupon = couponRows[0];
+
+    if (coupon.current_uses >= coupon.max_uses) {
+      console.log("Coupon usage limit reached:", coupon);
+      return res.status(400).json({ error: "Coupon usage limit reached" });
+    }
+
+    console.log("Coupon validated successfully:", coupon);
+
     res.status(200).json({
       valid: true,
-      discount_percentage: coupon[0].discount_percentage,
-      school_name: coupon[0].school_name,
+      discount_percentage: coupon.discount_percentage,
+      school_name: coupon.school_name || "Unknown School",
     });
   } catch (error) {
     console.error("Error validating coupon:", error);
@@ -192,10 +216,6 @@ const validateCoupon = async (req, res) => {
   }
 };
 
-
-
-// Add to couponController.js
-
 const generateStudentCoupon = async (req, res) => {
   console.log('Request body for student coupon:', req.body);
   const { schoolId, discountPercentage, validFrom, validUntil, maxUses } = req.body;
@@ -205,7 +225,6 @@ const generateStudentCoupon = async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Fetch the school details including user_id
     const [schoolResults] = await db.query(`
       SELECT 
         u.email as school_email,
@@ -225,7 +244,6 @@ const generateStudentCoupon = async (req, res) => {
     const couponCode = `STU-${schoolId.toString().padStart(4, '0')}-${uuidv4().substring(0, 6).toUpperCase()}`;
     console.log('Generated Student Coupon Code:', couponCode);
 
-    // Pass the school's user_id to createStudentCoupon
     await createStudentCoupon(
       schoolId,
       couponCode,
@@ -233,7 +251,7 @@ const generateStudentCoupon = async (req, res) => {
       validFrom,
       validUntil,
       maxUses || 5000,
-      user_id  // Use school's user_id
+      user_id
     );
 
     const [studentResults] = await db.query(`
@@ -251,7 +269,6 @@ const generateStudentCoupon = async (req, res) => {
       schoolName: school_name,
       studentCount,
     });
-
   } catch (error) {
     console.error('Error in student coupon generation process:', error);
     res.status(500).json({
@@ -280,7 +297,6 @@ const sendStudentCouponEmail = async (req, res) => {
   }
 
   try {
-    // Get school email and student emails
     const [schoolResults] = await db.query(`
       SELECT u.email as school_email, s.school_name
       FROM schools s
@@ -296,7 +312,6 @@ const sendStudentCouponEmail = async (req, res) => {
       });
     }
 
-    // Get student emails
     const [studentResults] = await db.query(`
       SELECT u.email
       FROM students s
@@ -314,7 +329,6 @@ const sendStudentCouponEmail = async (req, res) => {
       schoolName: schoolResults[0].school_name
     };
 
-    // Assuming you have a function to send emails to multiple recipients
     await sendStudentCouponNotification(
       schoolResults[0].school_email,
       studentEmails,
@@ -328,7 +342,6 @@ const sendStudentCouponEmail = async (req, res) => {
         student_count: studentEmails.length
       }
     });
-
   } catch (error) {
     console.error('Error in student coupon email sending process:', error);
     res.status(500).json({ 
@@ -340,7 +353,7 @@ const sendStudentCouponEmail = async (req, res) => {
 
 const getSchoolsWithCouponStatus = async (req, res) => {
   try {
-    const seEmployeeId = req.query.seEmployeeId; // Pass SE employee ID as a query parameter
+    const seEmployeeId = req.query.seEmployeeId;
     if (!seEmployeeId) {
       return res.status(400).json({ error: 'SE employee ID is required' });
     }
@@ -356,16 +369,17 @@ const getSchoolsWithCouponStatus = async (req, res) => {
       WHERE s.employee_id = ?
     `, [seEmployeeId]);
 
-    res.status(200).json(results);
+    console.log('Schools with coupon status for SE:', seEmployeeId, results);
+    res.status(200).json(results || []);
   } catch (error) {
     console.error('Error fetching schools with coupon status:', error);
-    res.status(500).json({ error: 'Failed to fetch schools' });
+    res.status(500).json({ error: 'Failed to fetch schools: ' + error.message });
   }
 };
 
 const getTotalSchools = async (req, res) => {
   try {
-    const seEmployeeId = req.query.seEmployeeId; // Pass SE employee ID as a query parameter
+    const seEmployeeId = req.query.seEmployeeId;
     if (!seEmployeeId) {
       return res.status(400).json({ error: 'SE employee ID is required' });
     }
@@ -386,41 +400,44 @@ const getTotalSchools = async (req, res) => {
       ORDER BY c.created_at DESC
     `, [seEmployeeId]);
 
-    res.status(200).json(results);
+    console.log('Total schools for SE:', seEmployeeId, results);
+    res.status(200).json(results || []);
   } catch (error) {
     console.error('Error fetching total schools:', error);
-    res.status(500).json({ error: 'Failed to fetch school data' });
+    res.status(500).json({ error: 'Failed to fetch school data: ' + error.message });
   }
 };
+
 const getSEGeneratedCoupons = async (req, res) => {
   try {
-      const [results] = await db.query(`
-          SELECT 
-              se.employee_id AS se_id,
-              s.school_name,
-              c.code AS school_coupon_code,
-              sc.code AS student_coupon_code,
-              c.created_at AS generation_date,
-              c.max_uses
-          FROM coupons c
-          JOIN schools s ON c.school_id = s.id
-          JOIN se_employees se ON c.se_employee_id = se.employee_id
-          LEFT JOIN student_coupons sc ON c.school_id = sc.school_id
-          ORDER BY c.created_at DESC
-      `);
+    const [results] = await db.query(`
+      SELECT 
+        se.employee_id AS se_id,
+        s.school_name,
+        c.code AS school_coupon_code,
+        sc.code AS student_coupon_code,
+        c.created_at AS generation_date,
+        c.max_uses
+      FROM coupons c
+      JOIN schools s ON c.school_id = s.id
+      JOIN se_employees se ON c.se_employee_id = se.employee_id
+      LEFT JOIN student_coupons sc ON c.school_id = sc.school_id
+      ORDER BY c.created_at DESC
+    `);
 
-      res.status(200).json(results);
+    console.log('SE generated coupons:', results);
+    res.status(200).json(results || []);
   } catch (error) {
-      console.error('Error fetching SE generated coupons:', error);
-      res.status(500).json({ error: 'Failed to fetch data' });
+    console.error('Error fetching SE generated coupons:', error);
+    res.status(500).json({ error: 'Failed to fetch data: ' + error.message });
   }
 };
+
 const getUserCoupons = async (req, res) => {
   const { userId } = req.params;
   console.log('Fetching coupons for userId:', userId);
 
   try {
-    // Check user role
     const [user] = await db.query(`SELECT user_type FROM users WHERE id = ?`, [userId]);
     if (!user.length) {
       return res.status(404).json({ error: 'User not found' });
@@ -437,8 +454,10 @@ const getUserCoupons = async (req, res) => {
           c.valid_from,
           c.valid_until,
           c.max_uses,
-          c.current_uses
+          c.current_uses,
+          s.school_name
         FROM coupons c
+        JOIN schools s ON c.school_id = s.id
         WHERE c.user_id = ?
       `, [userId]);
       coupons = schoolCoupons.map(coupon => ({ ...coupon, type: 'school' }));
@@ -450,16 +469,18 @@ const getUserCoupons = async (req, res) => {
           sc.valid_from,
           sc.valid_until,
           sc.max_uses,
-          sc.current_uses
+          sc.current_uses,
+          s.school_name
         FROM student_coupons sc
-        JOIN students s ON sc.school_id = s.school_id
-        WHERE s.user_id = ?
+        JOIN schools s ON sc.school_id = s.id
+        JOIN students st ON st.school_id = s.id
+        WHERE st.user_id = ?
       `, [userId]);
       coupons = studentCoupons.map(coupon => ({ ...coupon, type: 'student' }));
     }
 
     console.log('Fetched Coupons:', coupons);
-    res.status(200).json(coupons);
+    res.status(200).json(coupons || []);
   } catch (error) {
     console.error('Error fetching user coupons:', error);
     res.status(500).json({
@@ -469,12 +490,9 @@ const getUserCoupons = async (req, res) => {
   }
 };
 
-
-// Add these to module.exports
 module.exports = {
   generateCoupon,
   getUserCoupons,
-  
   sendCouponEmail,
   validateCoupon,
   generateStudentCoupon,

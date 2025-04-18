@@ -1,3 +1,4 @@
+
 const CheckoutModel = require('../models/CheckoutModel');
 const db = require('../config/db');
 
@@ -15,6 +16,7 @@ class CheckoutController {
     let connection;
     try {
       const { userId, fullName, email, address, city, state, pincode, phone, total, couponCode, cartItems } = req.body;
+      console.log('Processing checkout with:', { userId, couponCode, total, cartItemsLength: cartItems?.length });
       connection = await db.getConnection();
       await connection.beginTransaction();
 
@@ -56,38 +58,60 @@ class CheckoutController {
         let couponValid = false;
         let couponData = null;
 
+        console.log('Validating coupon:', couponCode);
+
+        // Check student coupons
         if (userType === 'student' && couponCode.startsWith('STU-')) {
           const [couponResult] = await connection.query(
             `SELECT * FROM student_coupons 
              WHERE code = ? 
              AND school_id = ?
-             AND valid_from <= NOW() 
-             AND valid_until >= NOW() 
-             AND current_uses < max_uses`,
+             AND valid_from <= CURRENT_TIMESTAMP 
+             AND valid_until >= CURRENT_TIMESTAMP 
+             AND COALESCE(current_uses, 0) < max_uses`,
             [couponCode, schoolId]
           );
-          if (couponResult.length === 0) {
-            throw new Error(`Invalid or expired student coupon: ${couponCode} for schoolId: ${schoolId}`);
+          console.log('Student coupon query result:', couponResult);
+          if (couponResult.length > 0) {
+            couponValid = true;
+            couponData = couponResult[0];
+            couponTable = 'student';
           }
-          couponValid = true;
-          couponData = couponResult[0];
-          couponTable = 'student_coupons';
-        } else if (userType === 'school' && couponCode.startsWith('SE-')) {
+        }
+        // Check school coupons
+        else if (userType === 'school' && couponCode.startsWith('SE-')) {
           const [couponResult] = await connection.query(
             `SELECT * FROM coupons 
              WHERE code = ? 
              AND school_id = ?
-             AND valid_from <= NOW() 
-             AND valid_until >= NOW() 
-             AND current_uses < max_uses`,
+             AND valid_from <= CURRENT_TIMESTAMP 
+             AND valid_until >= CURRENT_TIMESTAMP 
+             AND COALESCE(current_uses, 0) < max_uses`,
             [couponCode, schoolId]
           );
-          if (couponResult.length === 0) {
-            throw new Error(`Invalid or expired school coupon: ${couponCode} for schoolId: ${schoolId}`);
+          console.log('School coupon query result:', couponResult);
+          if (couponResult.length > 0) {
+            couponValid = true;
+            couponData = couponResult[0];
+            couponTable = 'coupon';
           }
-          couponValid = true;
-          couponData = couponResult[0];
-          couponTable = 'coupons';
+        }
+        // Check universal coupons (couponsall)
+        else {
+          const [couponResult] = await connection.query(
+            `SELECT * FROM couponsall 
+             WHERE code = ? 
+             AND valid_from <= CURRENT_TIMESTAMP 
+             AND valid_until >= CURRENT_TIMESTAMP 
+             AND COALESCE(current_uses, 0) < max_uses`,
+            [couponCode]
+          );
+          console.log('Couponsall query result:', couponResult);
+          if (couponResult.length > 0) {
+            couponValid = true;
+            couponData = couponResult[0];
+            couponTable = 'universal';
+          }
         }
 
         if (!couponValid) {
@@ -95,6 +119,7 @@ class CheckoutController {
         }
 
         discount = (total * couponData.discount_percentage) / 100;
+        console.log('Coupon applied:', { code: couponCode, discount_percentage: couponData.discount_percentage, discount });
 
         if (userType === 'school' && seId) {
           const [previousUsage] = await connection.query(
@@ -142,14 +167,20 @@ class CheckoutController {
           console.log("School Reward Points updated - SchoolId:", schoolId, "Points Added:", pointsAwarded);
         }
 
-        await connection.query(
-          `INSERT INTO coupon_usage_log (user_id, coupon_code, discount_amount, order_total, points_awarded, coupon_table) 
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [userId, couponCode, discount, total, pointsAwarded, couponTable]
-        );
+        try {
+          await connection.query(
+            `INSERT INTO coupon_usage_log (user_id, coupon_code, discount_amount, order_total, points_awarded, coupon_table) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [userId, couponCode, discount, total, pointsAwarded, couponTable]
+          );
+        } catch (insertError) {
+          console.error('Error inserting into coupon_usage_log:', insertError, { userId, couponCode, couponTable });
+          throw insertError;
+        }
 
         await connection.query(
-          `UPDATE ${couponTable} SET current_uses = current_uses + 1 WHERE id = ?`,
+          `UPDATE ${couponTable === 'coupon' ? 'coupons' : couponTable === 'student' ? 'student_coupons' : 'couponsall'} 
+           SET current_uses = current_uses + 1 WHERE id = ?`,
           [couponData.id]
         );
       }
@@ -200,6 +231,8 @@ class CheckoutController {
     try {
       const { code, userId, userType } = req.body;
 
+      console.log('Validating coupon in validateCoupon:', { code, userId, userType });
+
       if (!code) {
         return res.status(400).json({ error: "Coupon code is required" });
       }
@@ -224,7 +257,7 @@ class CheckoutController {
         });
       }
 
-      let couponQuery, params;
+      let couponQuery, params, couponTable;
 
       if (code.startsWith('SE-')) {
         const [schoolResult] = await db.query(
@@ -239,14 +272,15 @@ class CheckoutController {
         const schoolId = schoolResult[0].id;
 
         couponQuery = `
-          SELECT * FROM coupons 
+          SELECT *, 'coupon' AS coupon_table FROM coupons 
           WHERE code = ? 
           AND school_id = ? 
-          AND valid_from <= NOW() 
-          AND valid_until >= NOW() 
-          AND current_uses < max_uses
+          AND valid_from <= CURRENT_TIMESTAMP 
+          AND valid_until >= CURRENT_TIMESTAMP 
+          AND COALESCE(current_uses, 0) < max_uses
         `;
         params = [code, schoolId];
+        couponTable = 'coupon';
 
       } else if (code.startsWith('STU-')) {
         const [studentResult] = await db.query(
@@ -261,27 +295,30 @@ class CheckoutController {
         const schoolId = studentResult[0].school_id;
 
         couponQuery = `
-          SELECT * FROM student_coupons 
+          SELECT *, 'student' AS coupon_table FROM student_coupons 
           WHERE code = ? 
           AND school_id = ? 
-          AND valid_from <= NOW() 
-          AND valid_until >= NOW() 
-          AND current_uses < max_uses
+          AND valid_from <= CURRENT_TIMESTAMP 
+          AND valid_until >= CURRENT_TIMESTAMP 
+          AND COALESCE(current_uses, 0) < max_uses
         `;
         params = [code, schoolId];
+        couponTable = 'student';
 
       } else {
         couponQuery = `
-          SELECT * FROM generic_coupons 
+          SELECT *, 'universal' AS coupon_table FROM couponsall 
           WHERE code = ? 
-          AND valid_from <= NOW() 
-          AND valid_until >= NOW() 
-          AND current_uses < max_uses
+          AND valid_from <= CURRENT_TIMESTAMP 
+          AND valid_until >= CURRENT_TIMESTAMP 
+          AND COALESCE(current_uses, 0) < max_uses
         `;
         params = [code];
+        couponTable = 'universal';
       }
 
       const [couponResult] = await db.query(couponQuery, params);
+      console.log('ValidateCoupon query result:', couponResult);
 
       if (couponResult.length === 0) {
         return res.status(400).json({
@@ -291,6 +328,7 @@ class CheckoutController {
 
       res.json({
         discount_percentage: couponResult[0].discount_percentage,
+        coupon_table: couponTable,
         message: "Coupon applied successfully"
       });
 
