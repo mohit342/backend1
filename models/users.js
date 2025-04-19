@@ -7,9 +7,11 @@ const insertUser = (userData) => {
   return db.query(query, userData);
 };
 
-const insertSE = (userId, employeeId) => {
-  const query = 'INSERT INTO se_employees (user_id, employee_id) VALUES (?, ?)';
-  return db.query(query, [userId, employeeId]);
+// Modify the insertSE function to include role
+const insertSE = (userId, employeeId, role) => {
+  const query = 'INSERT INTO se_employees (user_id, employee_id, role) VALUES (?, ?, ?)';
+  console.log(`Inserting SE: user_id=${userId}, employee_id=${employeeId}, role=${role}`); // Debug log
+  return db.query(query, [userId, employeeId, role]);
 };
 
 const insertStudent = (userId, schoolId) => {

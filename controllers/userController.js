@@ -18,7 +18,7 @@ const registerUser = async (req, res) => {
     state,
     address,
     employeeId,
-    seRole // New field for SE role
+    seRole // Ensure this is received
   } = req.body;
 
   let connection;
@@ -64,7 +64,8 @@ const registerUser = async (req, res) => {
         throw new Error('Failed to create school entry');
       }
     } else if (userType === 'se') {
-      await connection.query('INSERT INTO se_employees (user_id, employee_id) VALUES (?, ?)', [userId, employeeId]);
+      await connection.query('INSERT INTO se_employees (user_id, employee_id, role) VALUES (?, ?, ?)', [userId, employeeId, seRole]);
+      console.log(`Registered SE with employee_id: ${employeeId}, role: ${seRole}`); // Debug log
     }
 
     await connection.commit();
@@ -77,7 +78,6 @@ const registerUser = async (req, res) => {
     if (connection) connection.release();
   }
 };
-
  
 // const fetchSEEmployees = async (req, res) => {
 //   try {
