@@ -26,7 +26,7 @@ exports.getHotDeals = async (req, res) => {
 
 exports.updateHotDeal = async (req, res) => {
     const { id } = req.params;
-    const { title, price, offer_text, is_visible, subcategory_id } = req.body; // Add subcategory_id
+    const { title, price, offer_text, is_visible, subcategory_id } = req.body;
     const image_path = req.file ? `/uploads/${req.file.filename}` : null;
 
     try {
@@ -48,9 +48,9 @@ exports.updateHotDeal = async (req, res) => {
             title: title || dealToUpdate.title,
             image_path: image_path || dealToUpdate.image_path,
             price: price || dealToUpdate.price,
-            offer_text: offer_text || dealToUpdate.offer_text,
+            offer_text: offer_text !== undefined ? offer_text : dealToUpdate.offer_text, // Allow empty or null
             is_visible: willBeVisible,
-            subcategory_id: subcategory_id || dealToUpdate.subcategory_id // Add this
+            subcategory_id: subcategory_id || dealToUpdate.subcategory_id
         };
 
         await HotDeal.update(id, updatedData);
@@ -62,7 +62,7 @@ exports.updateHotDeal = async (req, res) => {
 };
 
 exports.createHotDeal = async (req, res) => {
-    const { title, price, offer_text, is_visible, subcategory_id } = req.body; // Add subcategory_id
+    const { title, price, offer_text, is_visible, subcategory_id } = req.body;
     const image_path = req.file ? `/uploads/${req.file.filename}` : null;
 
     try {
@@ -70,9 +70,9 @@ exports.createHotDeal = async (req, res) => {
             title, 
             image_path, 
             price, 
-            offer_text, 
+            offer_text: offer_text || null, // Allow null or empty
             is_visible: is_visible === 'true' || is_visible === true,
-            subcategory_id // Add this
+            subcategory_id
         });
         res.json({ message: 'Hot Deal created successfully' });
     } catch (err) {

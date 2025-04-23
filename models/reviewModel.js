@@ -30,7 +30,12 @@ class ReviewModel {
         "INSERT INTO reviews (user_id, username, product_id, rating, comment) VALUES (?, ?, ?, ?, ?)",
         [userId, username, productId, rating, comment]
       );
-      return { id: result.insertId, user_id: userId, username, product_id: productId, rating, comment };
+      // Fetch the newly created review to include created_at
+      const [newReview] = await pool.query(
+        "SELECT id, user_id, username, product_id, rating, comment, created_at FROM reviews WHERE id = ?",
+        [result.insertId]
+      );
+      return newReview[0]; // Return the complete review object
     } catch (error) {
       throw new Error("Error creating review: " + error.message);
     }
@@ -67,4 +72,4 @@ class ReviewModel {
   }
 }
 
-module.exports = ReviewModel;
+module.exports = ReviewModel; 

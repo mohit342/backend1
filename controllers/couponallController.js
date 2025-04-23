@@ -62,15 +62,31 @@ exports.getUserCoupons = async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 };
-// exports.getSpecialCoupons = async (req, res) => {
-//   try {
-//     const userId = req.params.userId;
-//     const [coupons] = await db.query(
-//       'SELECT * FROM couponsall WHERE name IS NOT NULL AND valid_from <= CURDATE() AND valid_until >= CURDATE() AND current_uses < max_uses'
-//     );
-//     res.status(200).json(coupons);
-//   } catch (error) {
-//     console.error('Error fetching special coupons:', error);
-//     res.status(500).json({ error: 'Server error' });
-//   }
-// };
+
+// Fetch special coupons
+exports.getSpecialCoupons = async (req, res) => {
+  try {
+    const [coupons] = await db.query(
+      'SELECT * FROM couponsall WHERE name IS NOT NULL AND valid_from <= CURDATE() AND valid_until >= CURDATE() AND current_uses < max_uses AND discount_percentage >= 20'
+    );
+    res.status(200).json(coupons);
+  } catch (error) {
+    console.error('Error fetching special coupons:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+};
+
+// Delete a coupon
+exports.deleteCoupon = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await db.query('DELETE FROM couponsall WHERE id = ?', [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Coupon not found' });
+    }
+    res.status(200).json({ message: 'Coupon deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting coupon:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+};

@@ -537,6 +537,7 @@ const getUserCount = async (req, res) => {
   }
 };
 // userController.js
+// userController.js
 const deleteUser = async (req, res) => {
   const { id } = req.params;
   let connection;
@@ -585,6 +586,9 @@ const deleteUser = async (req, res) => {
       const [se] = await connection.query('SELECT employee_id FROM se_employees WHERE user_id = ?', [id]);
       if (se.length > 0) {
         const employeeId = se[0].employee_id;
+        // Delete related redeem_requests
+        const [redeemRequestResult] = await connection.query('DELETE FROM redeem_requests WHERE se_id = ?', [employeeId]);
+        console.log(`Deleted ${redeemRequestResult.affectedRows} redeem_requests for se_id ${employeeId}`);
         // Delete related coupons
         const [couponResult] = await connection.query('DELETE FROM coupons WHERE se_employee_id = ?', [employeeId]);
         console.log(`Deleted ${couponResult.affectedRows} coupons for se_employee_id ${employeeId}`);

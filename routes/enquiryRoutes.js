@@ -20,19 +20,6 @@ router.post('/send-enquiry', async (req, res) => {
         }
     });
 
-    // Email content
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: 'lakshitajoshi68@gmail.com',
-        subject: 'New Enquiry Form Submission',
-        html: `
-            <h3>New Enquiry Details:</h3>
-            <p><strong>Name:</strong> ${name}</p>
-            <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Message:</strong> ${message}</p>
-        `
-    };
-
     try {
         // Save to database
         await db.query(
@@ -40,8 +27,22 @@ router.post('/send-enquiry', async (req, res) => {
             [name, email, message]
         );
 
-        // Send email
-        await transporter.sendMail(mailOptions);
+        // Send email asynchronously without awaiting
+        setImmediate(() => {
+            transporter.sendMail({
+                from: process.env.EMAIL_USER,
+                to: 'lakshitajoshi68@gmail.com',
+                subject: 'New Enquiry Form Submission',
+                html: `
+                    <h3>New Enquiry Details:</h3>
+                    <p><strong>Name:</strong> ${name}</p>
+                    <p><strong>Email:</strong> ${email}</p>
+                    <p><strong>Message:</strong> ${message}</p>
+                `
+            }).catch(err => console.error('Error sending email:', err));
+        });
+
+        // Respond immediately
         res.status(200).json({ success: true });
     } catch (error) {
         console.error('Error processing enquiry:', error);
