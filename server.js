@@ -1,3 +1,7 @@
+// const WebSocket = require('ws');
+// const http = require('http');
+
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -83,6 +87,20 @@ app.get('', (req, res) => {
       .map(r => `${Object.keys(r.route.methods).join(',')} ${r.route.path}`)
   });
 });
+
+// const server = http.createServer(app);
+// const wss = new WebSocket.Server({ server });
+
+// wss.on('connection', (ws) => {
+//   console.log('Client connected');
+//   ws.on('message', (message) => {
+//     console.log(`Received: ${message}`);
+//     ws.send(`Echo: ${message}`);
+//   });
+//   ws.on('close', () => {
+//     console.log('Client disconnected');
+//   });
+// });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
